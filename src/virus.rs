@@ -44,6 +44,20 @@ impl ToString for Node {
         format!("{},{}", b1.format(self.lat), b2.format(self.lng))
     }
 }
+const R: f64 = 6_371_000.0;
+
+impl Node {
+    pub fn dist(self, rhs: &Node) -> f64 {
+        // Haversine meters
+        let (lat1, lat2) = (self.lat.to_radians(), rhs.lat.to_radians());
+        let dlat = (rhs.lat - self.lat).to_radians();
+        let dlng = (rhs.lng - self.lng).to_radians();
+        let s1 = (dlat / 2.0).sin();
+        let s2 = (dlng / 2.0).sin();
+        let h = s1 * s1 + lat1.cos() * lat2.cos() * s2 * s2;
+        2.0 * R * h.sqrt().asin()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -72,6 +86,8 @@ pub struct Options {
 
     /// Postprocess: passes over thresholds schedule.
     pub post_passes: usize,
+    pub portals: usize,
+    pub seam_refine: bool,
 }
 
 impl Default for Options {
@@ -86,6 +102,8 @@ impl Default for Options {
             merge_per_sample: 16,
             post_k: 80,
             post_passes: 6,
+            portals: 96,
+            seam_refine: true,
         }
     }
 }
@@ -164,14 +182,14 @@ fn solve_rec(points: Vec<Node>, opts: &Options) -> std::io::Result<Vec<Node>> {
     // Leaf.
     if n <= opts.leaf_size {
         let mut tour = run_external_tsp_nodes(&opts.tsp_path, &points)?;
-        normalize_cycle_nodes_in_place(&mut tour);
+        // normalize_cycle_nodes_in_place(&mut tour);
         return Ok(tour);
     }
 
     // Hard cap safety: if <= max_leaf_size, you can call tsp directly (usually best for quality).
     if n <= opts.max_leaf_size {
         let mut tour = run_external_tsp_nodes(&opts.tsp_path, &points)?;
-        normalize_cycle_nodes_in_place(&mut tour);
+        // normalize_cycle_nodes_in_place(&mut tour);
         return Ok(tour);
     }
 
@@ -183,15 +201,34 @@ fn solve_rec(points: Vec<Node>, opts: &Options) -> std::io::Result<Vec<Node>> {
 
     let mut tour_a = a_res?;
     let mut tour_b = b_res?;
-    normalize_cycle_nodes_in_place(&mut tour_a);
-    normalize_cycle_nodes_in_place(&mut tour_b);
 
-    // Proximity-based merge (much better than index portals for virus pools).
-    let mut merged =
-        merge_cycles_proximity_symmetric(&tour_a, &tour_b, opts.merge_sample, opts.merge_per_sample);
+    let mut merged = if opts.portals > 0 {
+        // Higher quality merge: try a small set of insertion points (portal edges) in A.
+        merge_open_paths_with_portal_insertion(&tour_a, &tour_b, opts.portals)
+    } else {
+        // Fast merge: just pick best endpoint orientation.
+        best_endpoint_concat(tour_a, tour_b)
+    };
 
-    normalize_cycle_nodes_in_place(&mut merged);
+    if opts.seam_refine {
+        refine_seams_small(&mut merged, 64);
+    }
+
     Ok(merged)
+
+    // normalize_cycle_nodes_in_place(&mut tour_a);
+    // normalize_cycle_nodes_in_place(&mut tour_b);
+
+    // // Proximity-based merge (much better than index portals for virus pools).
+    // let mut merged = merge_cycles_proximity_symmetric(
+    //     &tour_a,
+    //     &tour_b,
+    //     opts.merge_sample,
+    //     opts.merge_per_sample,
+    // );
+
+    // normalize_cycle_nodes_in_place(&mut merged);
+    // Ok(merged)
 }
 
 /* ========================= Region-Growing Split ========================= */
@@ -850,3 +887,150 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 */
+
+/* ------------------------------ Open Merge ----------------------------- */
+
+fn best_endpoint_concat(mut a: Vec<Node>, mut b: Vec<Node>) -> Vec<Node> {
+    // Choose orientation among 4 combinations to minimize bridge.
+    // We'll keep 'a' as primary; maybe reverse a, maybe reverse b.
+    let (a0, a1) = (a[0], *a.last().unwrap());
+    let (b0, b1) = (b[0], *b.last().unwrap());
+
+    // costs for connecting end_of_first -> start_of_second
+    let cost_a_b = a1.dist(&b0);
+    let cost_a_rb = a1.dist(&b1);
+    let cost_ra_b = a0.dist(&b0);
+    let cost_ra_rb = a0.dist(&b1);
+
+    // Pick smallest and orient accordingly.
+    let mut best = cost_a_b;
+    let mut mode = 0; // 0: a + b
+    if cost_a_rb < best {
+        best = cost_a_rb;
+        mode = 1;
+    } // a + rev(b)
+    if cost_ra_b < best {
+        best = cost_ra_b;
+        mode = 2;
+    } // rev(a) + b
+    if cost_ra_rb < best {
+        best = cost_ra_rb;
+        mode = 3;
+    } // rev(a) + rev(b)
+
+    if mode == 2 || mode == 3 {
+        a.reverse();
+    }
+    if mode == 1 || mode == 3 {
+        b.reverse();
+    }
+
+    a.extend(b);
+    a
+}
+
+/// Higher-quality open-path merge:
+/// Insert B into A by cutting A at a "portal edge" and reconnecting through B's endpoints.
+/// We try a limited set of cut positions for speed and pick the best.
+fn merge_open_paths_with_portal_insertion(a: &[Node], b: &[Node], portals: usize) -> Vec<Node> {
+    // Candidates are cut points i meaning split A into prefix A[0..=i] and suffix A[i+1..]
+    // Then join: prefix + (best-oriented B) + suffix, with two bridges:
+    //   bridge1 = a[i].dist(&b_start)
+    //   bridge2 = b_end.dist(&a[i+1])
+    //
+    // We try also reversed B.
+    let n = a.len();
+    if n < 2 {
+        return best_endpoint_concat(a.to_vec(), b.to_vec());
+    }
+
+    let idxs = portal_cut_indices(n, portals);
+
+    let mut best_cost = f64::INFINITY;
+    let mut best_i = 0usize;
+    let mut best_rev_b = false;
+
+    for &i in &idxs {
+        if i + 1 >= n {
+            continue;
+        }
+        let left_end = a[i];
+        let right_start = a[i + 1];
+
+        // B normal
+        let b_start = b[0];
+        let b_end = *b.last().unwrap();
+        let c1 = left_end.dist(&b_start) + b_end.dist(&right_start);
+
+        // B reversed
+        let rb_start = b_end;
+        let rb_end = b_start;
+        let c2 = left_end.dist(&rb_start) + rb_end.dist(&right_start);
+
+        if c1 < best_cost {
+            best_cost = c1;
+            best_i = i;
+            best_rev_b = false;
+        }
+        if c2 < best_cost {
+            best_cost = c2;
+            best_i = i;
+            best_rev_b = true;
+        }
+    }
+
+    // Build: A[0..=best_i] + (B oriented) + A[best_i+1..]
+    let mut out = Vec::with_capacity(a.len() + b.len());
+    out.extend_from_slice(&a[..=best_i]);
+
+    if !best_rev_b {
+        out.extend_from_slice(b);
+    } else {
+        out.extend(b.iter().rev().copied());
+    }
+
+    out.extend_from_slice(&a[(best_i + 1)..]);
+    out
+}
+
+fn portal_cut_indices(n: usize, portals: usize) -> Vec<usize> {
+    let k = portals.min(n.saturating_sub(1)).max(4);
+    let step = (n as f64) / (k as f64);
+    let mut v: Vec<usize> = (0..k)
+        .map(|t| ((t as f64) * step).floor() as usize)
+        .filter(|&i| i + 1 < n)
+        .collect();
+    v.sort_unstable();
+    v.dedup();
+    if !v.contains(&0) {
+        v.push(0);
+    }
+    v.sort_unstable();
+    v
+}
+
+/* --------------------------- Local Refinement -------------------------- */
+
+fn refine_seams_small(route: &mut [Node], window: usize) {
+    let n = route.len();
+    if n < 6 {
+        return;
+    }
+    let w = window.min(n / 2).max(8);
+
+    for i in 1..(n - 3) {
+        let a = route[i - 1];
+        let b = route[i];
+        let j_max = (i + w).min(n - 2);
+
+        for j in (i + 1)..=j_max {
+            let c = route[j];
+            let d = route[j + 1];
+            let before = a.dist(&b) + c.dist(&d);
+            let after = a.dist(&c) + b.dist(&d);
+            if after + 1e-9 < before {
+                route[i..=j].reverse();
+            }
+        }
+    }
+}

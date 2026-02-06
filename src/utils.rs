@@ -32,7 +32,7 @@ impl Point {
     }
 }
 
-pub fn find_outliers(points: &[Point], factor: f64) -> (Vec<Point>, Vec<Point>) {
+pub fn get_outliers(points: &[Point], factor: f64) -> (Vec<Point>, Vec<Point>) {
     let mut included = Vec::new();
     let mut excluded = Vec::new();
 
@@ -63,6 +63,23 @@ pub fn find_outliers(points: &[Point], factor: f64) -> (Vec<Point>, Vec<Point>) 
     }
 
     (included, excluded)
+}
+
+pub fn centroid(points: &[Point]) -> Result<Point, String> {
+    if points.is_empty() {
+        return Err("No Points".to_string());
+    }
+    let mut sum_lat = 0.0;
+    let mut sum_lng = 0.0;
+    for p in points {
+        sum_lat += p.lat;
+        sum_lng += p.lng;
+    }
+    let n = points.len() as f64;
+    Ok(Point {
+        lat: sum_lat / n,
+        lng: sum_lng / n,
+    })
 }
 
 pub fn read_points_from_stdin() -> Result<Vec<Point>, String> {
@@ -121,7 +138,7 @@ pub fn read_points_from_stdin() -> Result<Vec<Point>, String> {
 }
 
 pub fn run_external_tsp_strict(tsp_path: &str, points: &[Point]) -> std::io::Result<Vec<Point>> {
-    eprintln!("Sending to TSP");
+    // eprintln!("Sending to TSP");
     // Use default formatting (shortest-roundtrip). Avoid fixed decimals that can collapse distinct points.
     let mut input = String::with_capacity(points.len() * 32);
     for (i, p) in points.iter().enumerate() {
@@ -159,7 +176,7 @@ pub fn run_external_tsp_strict(tsp_path: &str, points: &[Point]) -> std::io::Res
         ));
     }
 
-    eprintln!("Single TSP finished");
+    // eprintln!("Single TSP finished");
     let out = parse_points_from_stdout(&stdout_s)?;
     if out.len() != points.len() {
         return Err(std::io::Error::new(
@@ -265,6 +282,7 @@ pub fn measure_distance_open(points: &[Point]) -> (f64, f64, i32) {
 
     let mut total = 0.0;
     let mut longest = 0.0;
+    let n = points.len();
 
     // OPEN: only edges i -> i+1
     for i in 0..(points.len() - 1) {
@@ -284,10 +302,14 @@ pub fn measure_distance_open(points: &[Point]) -> (f64, f64, i32) {
     // Spike threshold: 10× average edge length (OPEN edges count = n-1)
     let mut spikes = 0;
     for i in 0..(points.len() - 1) {
-        let d = points[i].dist(&points[i + 1]);
-        if d > 10.0 * avg_edge {
+        let d_l = points[i].dist(&points[(i + 1) % n]);
+        if d_l > threshold {
             spikes += 1;
         }
+        // let d_r = points[i].dist(&points[(i - 1) % n]);
+        // if d_l > threshold && d_r > threshold {
+        //     spikes += 1;
+        // }
     }
 
     eprintln!("Total Over {threshold:.0}m: {spikes}");

@@ -1,4 +1,4 @@
-use std::{collections::HashSet, env, time::Instant};
+use std::{env, time::Instant};
 
 // use crate::{first::WrapperOptions};
 
@@ -6,11 +6,11 @@ use std::{collections::HashSet, env, time::Instant};
 // mod outlier_repair;
 // mod outlier_v2;
 mod old;
-mod virus;
 mod outliers;
+mod virus;
 // mod recursive;
-mod utils;
 mod processing;
+mod utils;
 
 fn main() -> std::io::Result<()> {
     let now = Instant::now();
@@ -35,7 +35,7 @@ fn main() -> std::io::Result<()> {
     let opts = old::Options {
         tsp_path: path.into(),
         leaf_size: args.leaf_size,
-        max_leaf_size: args.max_leaf_size, 
+        max_leaf_size: args.max_leaf_size,
         // portals: args.portals,
         // seam_refine: args.seam_refine,
         ..Default::default()
@@ -64,11 +64,9 @@ fn main() -> std::io::Result<()> {
     //     Ok(points) => points,
     //     Err(err) => panic!("TSP run error: {:?}", err),
     // };
-    let mut seen = HashSet::new();
 
     for point in route.iter() {
-        println!("{},{}", point.lat, point.lng);
-        seen.insert(point.to_string());
+        println!("{}", point.to_string());
     }
 
     eprintln!("Output length: {}", route.len());
