@@ -760,6 +760,14 @@ dependencies = [
 name = "tsp-mt"
 version = "0.1.0"
 dependencies = [
+ "log",
+ "tsp_mt_core",
+]
+
+[[package]]
+name = "tsp_mt_core"
+version = "0.1.0"
+dependencies = [
  "env_logger",
  "h3o",
  "kiddo",
@@ -769,6 +777,15 @@ dependencies = [
  "rayon",
  "ryu",
  "thiserror",
+]
+
+[[package]]
+name = "tsp_mt_derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

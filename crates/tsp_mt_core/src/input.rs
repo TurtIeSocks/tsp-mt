@@ -1,6 +1,5 @@
 use std::{
-    env,
-    fmt,
+    env, fmt,
     io::Read,
     path::{Path, PathBuf},
 };

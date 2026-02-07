@@ -20,7 +20,6 @@ impl LKHNode {
             y: lat_or_y,
         }
     }
-    
 
     pub(crate) fn lat(&self) -> f64 {
         self.y

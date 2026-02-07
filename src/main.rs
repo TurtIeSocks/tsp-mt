@@ -2,7 +2,9 @@ use std::time::Instant;
 
 use log::info;
 
-use tsp_mt::{Result, SolverInput, SolverOptions, logging, solve_tsp_with_lkh_h3_chunked, utils};
+use tsp_mt_core::{
+    Result, SolverInput, SolverOptions, logging, solve_tsp_with_lkh_h3_chunked, utils,
+};
 
 fn main() -> Result<()> {
     let now = Instant::now();

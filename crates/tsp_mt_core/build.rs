@@ -14,25 +14,29 @@ const LKH_WINDOWS_URL: &str = "http://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=lkh/lkh.tgz");
-    println!("cargo:rerun-if-changed={LKH_WINDOWS_EXE}");
+    println!("cargo:rerun-if-changed=../../lkh/lkh.tgz");
+    println!("cargo:rerun-if-changed=../../{LKH_WINDOWS_EXE}");
     println!("cargo:rerun-if-env-changed=TSP_MT_LKH_URL");
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
+    let workspace_root = manifest_dir
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("failed to resolve workspace root")?;
 
     if cfg!(target_os = "windows") {
-        return build_windows(&manifest_dir, &out_dir);
+        return build_windows(workspace_root, &out_dir);
     }
     if !cfg!(target_family = "unix") {
         return Err("LKH build is only supported on unix-like targets and Windows".into());
     }
 
-    build_unix(&manifest_dir, &out_dir)
+    build_unix(workspace_root, &out_dir)
 }
 
-fn build_windows(manifest_dir: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>> {
-    let root_exe = manifest_dir.join(LKH_WINDOWS_EXE);
+fn build_windows(workspace_root: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>> {
+    let root_exe = workspace_root.join(LKH_WINDOWS_EXE);
     if !root_exe.exists() {
         return Err(format!(
             "windows build requires {LKH_WINDOWS_EXE} in repository root ({}). \
@@ -48,7 +52,7 @@ fn build_windows(manifest_dir: &Path, out_dir: &Path) -> Result<(), Box<dyn Erro
     Ok(())
 }
 
-fn build_unix(manifest_dir: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>> {
+fn build_unix(workspace_root: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>> {
     let build_root = out_dir.join("lkh-build");
     fs::create_dir_all(&build_root)?;
 
@@ -57,7 +61,7 @@ fn build_unix(manifest_dir: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>>
     let built_exe = src_dir.join("LKH");
 
     if !built_exe.exists() {
-        ensure_archive(&manifest_dir, &archive_path)?;
+        ensure_archive(workspace_root, &archive_path)?;
         if !src_dir.exists() {
             run_cmd(
                 Command::new("tar")
@@ -96,7 +100,7 @@ fn write_embedded_source(out_dir: &Path, bundled_bin: &Path) -> Result<(), Box<d
     Ok(())
 }
 
-fn ensure_archive(manifest_dir: &Path, archive_path: &Path) -> Result<(), Box<dyn Error>> {
+fn ensure_archive(workspace_root: &Path, archive_path: &Path) -> Result<(), Box<dyn Error>> {
     if archive_path.exists() {
         return Ok(());
     }
@@ -106,7 +110,7 @@ fn ensure_archive(manifest_dir: &Path, archive_path: &Path) -> Result<(), Box<dy
         return Ok(());
     }
 
-    let vendored = manifest_dir.join("lkh").join("lkh.tgz");
+    let vendored = workspace_root.join("lkh").join("lkh.tgz");
     if vendored.exists() {
         fs::copy(&vendored, archive_path)?;
         return Ok(());
