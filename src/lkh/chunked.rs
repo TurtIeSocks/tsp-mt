@@ -9,6 +9,7 @@ use geo::Coord;
 use rayon::prelude::*;
 
 use crate::lkh::{
+    SolverInput,
     config::LkhConfig,
     constants::{CENTROIDS_FILE, MIN_CYCLE_POINTS, RUN_FILE},
     geometry::TourGeometry,
@@ -38,8 +39,8 @@ struct ChunkSolver;
 
 impl ChunkSolver {
     fn solve_single(
-        lkh_exe: PathBuf,
-        work_dir: PathBuf,
+        lkh_exe: &PathBuf,
+        work_dir: &PathBuf,
         chunk_points: &[Point],
         options: &SolverOptions,
     ) -> io::Result<Vec<usize>> {
@@ -66,12 +67,8 @@ impl ChunkSolver {
         let rs = RunSpec::new(
             RUN_INDEX_SINGLE,
             cfg.base_seed(),
-            solver
-                .work_dir()
-                .join(RUN_FILE.par_idx(RUN_INDEX_SINGLE)),
-            solver
-                .work_dir()
-                .join(RUN_FILE.tour_idx(RUN_INDEX_SINGLE)),
+            solver.work_dir().join(RUN_FILE.par_idx(RUN_INDEX_SINGLE)),
+            solver.work_dir().join(RUN_FILE.tour_idx(RUN_INDEX_SINGLE)),
         );
         rs.write_lkh_par(&cfg, &solver)?;
 
@@ -118,11 +115,9 @@ impl ChunkSolver {
     }
 }
 
-pub(crate) fn solve_tsp_with_lkh_h3_chunked_with_options(
-    lkh_exe: PathBuf,
-    work_dir: PathBuf,
-    input: &[Point],
-    options: &SolverOptions,
+pub fn solve_tsp_with_lkh_h3_chunked(
+    input: SolverInput,
+    options: SolverOptions,
 ) -> io::Result<Vec<Point>> {
     if options.max_chunk_size == 0 {
         return Err(io::Error::new(
@@ -136,26 +131,26 @@ pub(crate) fn solve_tsp_with_lkh_h3_chunked_with_options(
             ERR_INVALID_PROJECTION_RADIUS,
         ));
     }
-    if input.iter().any(|p| !p.is_valid()) {
+    if input.points.iter().any(|p| !p.is_valid()) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             ERR_INVALID_POINT,
         ));
     }
 
-    if input.len() <= options.max_chunk_size {
-        return super::solve_tsp_with_lkh_parallel_with_options(lkh_exe, work_dir, input, options);
+    if input.n() <= options.max_chunk_size {
+        return super::solve_tsp_with_lkh_parallel(input, options);
     }
 
-    let global_coords = PlaneProjection::new(input)
+    let global_coords = PlaneProjection::new(input.points)
         .radius(options.projection_radius)
         .project();
 
-    let chunks = H3Chunker::partition_indices(input, options.max_chunk_size)?;
+    let chunks = H3Chunker::partition_indices(input.points, options.max_chunk_size)?;
     if options.verbose {
         eprintln!(
             "Chunked {} points into {} chunks (max {})",
-            input.len(),
+            input.n(),
             chunks.len(),
             options.max_chunk_size
         );
@@ -165,12 +160,12 @@ pub(crate) fn solve_tsp_with_lkh_h3_chunked_with_options(
         .par_iter()
         .enumerate()
         .map(|(chunk_id, idxs)| -> io::Result<Vec<usize>> {
-            let chunk_points: Vec<Point> = idxs.iter().map(|&i| input[i]).collect();
-            let chunk_dir = work_dir.join(format!("{CHUNK_DIR_PREFIX}{chunk_id}"));
+            let chunk_points: Vec<Point> = idxs.iter().map(|&i| input.get_point(i)).collect();
+            let chunk_dir = input.work_dir.join(format!("{CHUNK_DIR_PREFIX}{chunk_id}"));
 
             let now = Instant::now();
             let tour_local =
-                ChunkSolver::solve_single(lkh_exe.clone(), chunk_dir, &chunk_points, options)?;
+                ChunkSolver::solve_single(input.lkh_exe, &chunk_dir, &chunk_points, &options)?;
             let tour_global: Vec<usize> = tour_local.into_iter().map(|li| idxs[li]).collect();
 
             if options.verbose {
@@ -190,8 +185,8 @@ pub(crate) fn solve_tsp_with_lkh_h3_chunked_with_options(
         .map(|idxs| TourGeometry::centroid_of_indices(&global_coords, idxs))
         .collect();
 
-    let order_dir = work_dir.join(CHUNK_ORDER_DIR);
-    let order = ChunkSolver::order_by_centroid_tsp(&lkh_exe, &order_dir, &centroids, options)?;
+    let order_dir = input.work_dir.join(CHUNK_ORDER_DIR);
+    let order = ChunkSolver::order_by_centroid_tsp(input.lkh_exe, &order_dir, &centroids, &options)?;
 
     let mut ordered_tours: Vec<Vec<usize>> = Vec::with_capacity(solved_chunk_tours.len());
     for ci in order {
@@ -210,5 +205,5 @@ pub(crate) fn solve_tsp_with_lkh_h3_chunked_with_options(
         options.verbose,
     );
 
-    Ok(merged.into_iter().map(|i| input[i]).collect())
+    Ok(merged.into_iter().map(|i| input.get_point(i)).collect())
 }

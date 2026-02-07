@@ -29,7 +29,7 @@ impl Default for SolverOptions {
             centroid_order_time_limit: 10,
             boundary_2opt_window: 500,
             boundary_2opt_passes: 50,
-            verbose: false,
+            verbose: true,
         }
     }
 }

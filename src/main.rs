@@ -6,7 +6,7 @@ use std::{env, time::Instant};
 // mod tsp;
 mod utils;
 
-use tsp_mt::lkh;
+use tsp_mt::lkh::{self, SolverInput, SolverOptions};
 
 fn main() -> std::io::Result<()> {
     let now = Instant::now();
@@ -32,7 +32,10 @@ fn main() -> std::io::Result<()> {
         })
         .collect();
 
-    let route = lkh::solve_tsp_with_lkh_h3_chunked(lkh, work_dir, &input)?;
+    let route = lkh::solve_tsp_with_lkh_h3_chunked(
+        SolverInput::new(&lkh, &work_dir, &input),
+        SolverOptions::default(),
+    )?;
     // let path = format!("{}", path.to_str().unwrap_or_default());
 
     // let args = parse_args();

@@ -10,6 +10,7 @@ use geo::Coord;
 use rayon::prelude::*;
 
 use crate::lkh::{
+    SolverInput,
     config::LkhConfig,
     constants::{MIN_CYCLE_POINTS, PREP_CANDIDATES_FILE, PROBLEM_FILE, RUN_FILE},
     geometry::TourGeometry,
@@ -34,16 +35,16 @@ const ERR_NO_RESULTS: &str = "No results";
 const ERR_INVALID_POINT: &str = "Input contains invalid lat/lng values";
 const ERR_INVALID_PROJECTION_RADIUS: &str = "projection_radius must be > 0";
 
-pub(crate) struct LkhSolver {
-    executable: PathBuf,
-    work_dir: PathBuf,
+pub(crate) struct LkhSolver<'a> {
+    executable: &'a PathBuf,
+    work_dir: &'a PathBuf,
     problem_file: PathBuf,
     candidate_file: PathBuf,
     pi_file: PathBuf,
 }
 
-impl LkhSolver {
-    pub(crate) fn new(executable: PathBuf, work_dir: PathBuf) -> Self {
+impl<'a> LkhSolver<'a> {
+    pub(crate) fn new(executable: &'a PathBuf, work_dir: &'a PathBuf) -> Self {
         let problem_file = work_dir.join(PROBLEM_FILE.tsp());
         let candidate_file = work_dir.join(PROBLEM_FILE.candidate());
         let pi_file = work_dir.join(PROBLEM_FILE.pi());
@@ -119,7 +120,7 @@ PI_FILE = {}
     }
 }
 
-impl Drop for LkhSolver {
+impl<'a> Drop for LkhSolver<'a> {
     fn drop(&mut self) {
         rm_file(&self.candidate_file);
         rm_file(&self.pi_file);
@@ -135,13 +136,11 @@ fn rm_file(pb: &Path) {
 
 /// Solve TSP by spawning multiple LKH processes in parallel with different SEEDs.
 /// Returns best tour points.
-pub(crate) fn solve_tsp_with_lkh_parallel_with_options(
-    lkh_exe: PathBuf,
-    work_dir: PathBuf,
-    input: &[Point],
-    options: &SolverOptions,
+pub fn solve_tsp_with_lkh_parallel(
+    input: SolverInput,
+    options: SolverOptions,
 ) -> io::Result<Vec<Point>> {
-    if input.len() < MIN_CYCLE_POINTS {
+    if input.n() < MIN_CYCLE_POINTS {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!("Need at least {MIN_CYCLE_POINTS} points for a cycle"),
@@ -153,18 +152,18 @@ pub(crate) fn solve_tsp_with_lkh_parallel_with_options(
             ERR_INVALID_PROJECTION_RADIUS,
         ));
     }
-    if input.iter().any(|p| !p.is_valid()) {
+    if input.points.iter().any(|p| !p.is_valid()) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             ERR_INVALID_POINT,
         ));
     }
 
-    let cfg = LkhConfig::new(input.len());
-    let solver = LkhSolver::new(lkh_exe, work_dir);
+    let cfg = LkhConfig::new(input.n());
+    let solver = LkhSolver::new(input.lkh_exe, input.work_dir);
     solver.create_work_dir()?;
 
-    let points = PlaneProjection::new(input)
+    let points = PlaneProjection::new(input.points)
         .radius(options.projection_radius)
         .project();
 
@@ -176,7 +175,7 @@ pub(crate) fn solve_tsp_with_lkh_parallel_with_options(
     if options.verbose {
         eprintln!(
             "Starting LKH for {} points and will run for {}s across {parallelism} threads",
-            input.len(),
+            input.n(),
             cfg.time_limit(),
         );
     }
@@ -230,5 +229,5 @@ pub(crate) fn solve_tsp_with_lkh_parallel_with_options(
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .ok_or_else(|| io::Error::other(ERR_NO_RESULTS))?;
 
-    Ok(tour.0.into_iter().map(|idx| input[idx]).collect())
+    Ok(tour.0.into_iter().map(|idx| input.get_point(idx)).collect())
 }
