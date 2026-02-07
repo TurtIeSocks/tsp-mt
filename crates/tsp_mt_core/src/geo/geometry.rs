@@ -42,3 +42,54 @@ impl TourGeometry {
         out
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::TourGeometry;
+    use crate::node::LKHNode;
+
+    #[test]
+    fn dist_uses_euclidean_metric() {
+        let a = LKHNode::new(0.0, 0.0);
+        let b = LKHNode::new(4.0, 3.0);
+        assert!((TourGeometry::dist(a, b) - 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn tour_length_closes_cycle() {
+        let points = vec![
+            LKHNode::new(0.0, 0.0),
+            LKHNode::new(0.0, 1.0),
+            LKHNode::new(1.0, 1.0),
+            LKHNode::new(1.0, 0.0),
+        ];
+        let tour = vec![0, 1, 2, 3];
+        let length = TourGeometry::tour_length(&points, &tour);
+        assert!((length - 4.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn centroid_of_indices_averages_coordinates() {
+        let coords = vec![
+            LKHNode::new(2.0, 1.0),
+            LKHNode::new(4.0, 3.0),
+            LKHNode::new(6.0, 5.0),
+        ];
+        let centroid = TourGeometry::centroid_of_indices(&coords, &[0, 2]);
+        assert!((centroid.y - 4.0).abs() < 1e-12);
+        assert!((centroid.x - 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn rotate_cycle_starts_at_requested_node() {
+        let rotated = TourGeometry::rotate_cycle(&[10, 20, 30, 40], 30);
+        assert_eq!(rotated, vec![30, 40, 10, 20]);
+    }
+
+    #[test]
+    fn rotate_cycle_returns_original_if_node_missing() {
+        let original = vec![1, 2, 3];
+        let rotated = TourGeometry::rotate_cycle(&original, 99);
+        assert_eq!(rotated, original);
+    }
+}

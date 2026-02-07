@@ -132,3 +132,79 @@ MAX_CANDIDATES = {} SYMMETRIC
         Ok(tour)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use super::RunSpec;
+
+    fn unique_temp_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("tsp-mt-tests-{name}-{nanos}"))
+    }
+
+    #[test]
+    fn parse_tsplib_tour_reads_tour_section_and_converts_to_zero_based() {
+        let dir = unique_temp_dir("parse-ok");
+        fs::create_dir_all(&dir).expect("create temp dir");
+
+        let rs = RunSpec::new(0, 7, dir.join("run.par"), dir.join("run.tour"));
+        fs::write(
+            rs.tour_path.clone(),
+            "NAME : test\nTOUR_SECTION\n2\n1\n3\n-1\nEOF\n",
+        )
+        .expect("write tour file");
+
+        let parsed = rs.parse_tsplib_tour(3).expect("parse tsplib tour");
+        assert_eq!(parsed, vec![1, 0, 2]);
+
+        fs::remove_dir_all(&dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn parse_tsplib_tour_errors_on_wrong_node_count() {
+        let dir = unique_temp_dir("parse-count");
+        fs::create_dir_all(&dir).expect("create temp dir");
+
+        let rs = RunSpec::new(0, 7, dir.join("run.par"), dir.join("run.tour"));
+        fs::write(rs.tour_path.clone(), "TOUR_SECTION\n1\n-1\nEOF\n").expect("write tour file");
+
+        let err = rs
+            .parse_tsplib_tour(2)
+            .expect_err("expected node-count mismatch");
+        let msg = err.to_string();
+        assert!(msg.contains("Expected 2 nodes in tour, got 1"));
+
+        fs::remove_dir_all(&dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn write_lkh_par_small_writes_expected_fields() {
+        let dir = unique_temp_dir("small-par");
+        fs::create_dir_all(&dir).expect("create temp dir");
+
+        let par_path = dir.join("run.par");
+        let rs = RunSpec::new(3, 99, par_path.clone(), dir.join("run.tour"));
+        rs.write_lkh_par_small(&dir.join("p.tsp"), 1234, 9)
+            .expect("write lkh par small");
+
+        let text = fs::read_to_string(par_path).expect("read par");
+        assert!(text.contains("PROBLEM_FILE = "));
+        assert!(text.contains("OUTPUT_TOUR_FILE = "));
+        assert!(text.contains("RUNS = 1"));
+        assert!(text.contains("MAX_TRIALS = 1234"));
+        assert!(text.contains("SEED = 99"));
+        assert!(text.contains("TIME_LIMIT = 9"));
+        assert!(text.contains("MAX_CANDIDATES = 32 SYMMETRIC"));
+
+        fs::remove_dir_all(&dir).expect("cleanup temp dir");
+    }
+}

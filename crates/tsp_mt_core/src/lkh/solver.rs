@@ -221,3 +221,52 @@ pub fn solve_tsp_with_lkh_parallel(
 
     Ok(best.0.into_iter().map(|idx| input.get_point(idx)).collect())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use super::LkhSolver;
+
+    fn unique_temp_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("tsp-mt-tests-{name}-{nanos}"))
+    }
+
+    #[test]
+    fn threads_is_at_least_one() {
+        assert!(LkhSolver::threads() >= 1);
+    }
+
+    #[test]
+    fn create_work_dir_creates_target_directory() {
+        let dir = unique_temp_dir("solver-workdir");
+        let solver = LkhSolver::new(std::path::Path::new("/tmp/lkh"), &dir);
+
+        solver.create_work_dir().expect("create work dir");
+        assert!(dir.exists());
+
+        fs::remove_dir_all(&dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn param_file_contains_expected_file_bindings() {
+        let dir = unique_temp_dir("solver-params");
+        let solver = LkhSolver::new(std::path::Path::new("/tmp/lkh"), &dir);
+        let params = solver.param_file();
+
+        assert!(params.contains("PROBLEM_FILE = "));
+        assert!(params.contains("CANDIDATE_FILE = "));
+        assert!(params.contains("PI_FILE = "));
+        assert!(params.contains("problem.tsp"));
+        assert!(params.contains("problem.cand"));
+        assert!(params.contains("problem.pi"));
+    }
+}

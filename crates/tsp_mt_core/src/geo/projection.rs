@@ -126,3 +126,37 @@ impl PlaneProjection {
         self.radial_project(dir)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::PlaneProjection;
+    use crate::node::LKHNode;
+
+    #[test]
+    fn project_preserves_point_count_and_returns_finite_coordinates() {
+        let input = vec![
+            LKHNode::new(37.7749, -122.4194),
+            LKHNode::new(34.0522, -118.2437),
+            LKHNode::new(40.7128, -74.0060),
+        ];
+
+        let projected = PlaneProjection::new(&input).radius(70.0).project();
+
+        assert_eq!(projected.len(), input.len());
+        assert!(projected.iter().all(|p| p.x.is_finite() && p.y.is_finite()));
+    }
+
+    #[test]
+    fn project_same_input_is_deterministic() {
+        let input = vec![LKHNode::new(48.8566, 2.3522), LKHNode::new(51.5074, -0.1278)];
+
+        let a = PlaneProjection::new(&input).radius(100.0).project();
+        let b = PlaneProjection::new(&input).radius(100.0).project();
+
+        assert_eq!(a.len(), b.len());
+        for (lhs, rhs) in a.iter().zip(b.iter()) {
+            assert!((lhs.x - rhs.x).abs() < 1e-12);
+            assert!((lhs.y - rhs.y).abs() < 1e-12);
+        }
+    }
+}

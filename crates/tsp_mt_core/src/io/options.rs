@@ -90,8 +90,19 @@ impl Default for SolverOptions {
 
 impl SolverOptions {
     pub fn from_args() -> Result<Self> {
+        Self::parse_from_iter(env::args().skip(1))
+    }
+
+    fn parse_from_iter<I, S>(args: I) -> Result<Self>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
         let mut options = Self::default();
-        let mut args = env::args().skip(1).peekable();
+        let mut args = args
+            .into_iter()
+            .map(|arg| arg.as_ref().to_owned())
+            .peekable();
 
         while let Some(arg) = args.next() {
             if arg == "--help" || arg == "-h" {
@@ -186,5 +197,122 @@ fn parse_bool(name: &str, value: &str) -> Result<bool> {
         _ => Err(Error::invalid_input(format!(
             "Invalid boolean for --{name}: {value} (expected true/false)"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use log::LevelFilter;
+
+    use super::{LogFormat, LogLevel, SolverOptions, parse_bool};
+
+    #[test]
+    fn parse_bool_accepts_common_true_values() {
+        assert_eq!(parse_bool("x", "true").expect("parse"), true);
+        assert_eq!(parse_bool("x", "1").expect("parse"), true);
+        assert_eq!(parse_bool("x", "YES").expect("parse"), true);
+        assert_eq!(parse_bool("x", "ON").expect("parse"), true);
+    }
+
+    #[test]
+    fn parse_bool_accepts_common_false_values() {
+        assert_eq!(parse_bool("x", "false").expect("parse"), false);
+        assert_eq!(parse_bool("x", "0").expect("parse"), false);
+        assert_eq!(parse_bool("x", "NO").expect("parse"), false);
+        assert_eq!(parse_bool("x", "off").expect("parse"), false);
+    }
+
+    #[test]
+    fn parse_bool_rejects_unknown_values() {
+        let err = parse_bool("log-timestamp", "maybe").expect_err("invalid bool should fail");
+        assert!(
+            err.to_string()
+                .contains("Invalid boolean for --log-timestamp: maybe")
+        );
+    }
+
+    #[test]
+    fn log_level_maps_to_expected_filter() {
+        assert_eq!(LogLevel::Error.to_filter(), LevelFilter::Error);
+        assert_eq!(LogLevel::Warn.to_filter(), LevelFilter::Warn);
+        assert_eq!(LogLevel::Info.to_filter(), LevelFilter::Info);
+        assert_eq!(LogLevel::Debug.to_filter(), LevelFilter::Debug);
+        assert_eq!(LogLevel::Trace.to_filter(), LevelFilter::Trace);
+        assert_eq!(LogLevel::Off.to_filter(), LevelFilter::Off);
+    }
+
+    #[test]
+    fn parse_from_iter_applies_known_cli_options() {
+        let options = SolverOptions::parse_from_iter([
+            "--projection-radius=120.5",
+            "--max-chunk-size=42",
+            "--centroid-order-seed=77",
+            "--centroid-order-max-trials=200",
+            "--centroid-order-time-limit=9",
+            "--boundary-2opt-window=8",
+            "--boundary-2opt-passes=7",
+            "--log-level=debug",
+            "--log-format=pretty",
+            "--log-timestamp=false",
+        ])
+        .expect("parse options");
+
+        assert_eq!(options.projection_radius, 120.5);
+        assert_eq!(options.max_chunk_size, 42);
+        assert_eq!(options.centroid_order_seed, 77);
+        assert_eq!(options.centroid_order_max_trials, 200);
+        assert_eq!(options.centroid_order_time_limit, 9);
+        assert_eq!(options.boundary_2opt_window, 8);
+        assert_eq!(options.boundary_2opt_passes, 7);
+        assert_eq!(options.log_level, LogLevel::Debug);
+        assert_eq!(options.log_format, LogFormat::Pretty);
+        assert!(!options.log_timestamp);
+    }
+
+    #[test]
+    fn parse_from_iter_accepts_no_log_timestamp_flag() {
+        let options =
+            SolverOptions::parse_from_iter(["--no-log-timestamp"]).expect("parse options");
+        assert!(!options.log_timestamp);
+    }
+
+    #[test]
+    fn parse_from_iter_rejects_no_log_timestamp_with_value() {
+        let err = SolverOptions::parse_from_iter(["--no-log-timestamp=true"])
+            .expect_err("expected flag value rejection");
+        assert!(err.to_string().contains("does not take a value"));
+    }
+
+    #[test]
+    fn parse_from_iter_rejects_unknown_option() {
+        let err = SolverOptions::parse_from_iter(["--unknown-opt=1"])
+            .expect_err("expected unknown option error");
+        assert!(err.to_string().contains("Unknown option: --unknown-opt"));
+    }
+
+    #[test]
+    fn parse_from_iter_rejects_unexpected_positional_argument() {
+        let err =
+            SolverOptions::parse_from_iter(["points.txt"]).expect_err("expected positional error");
+        assert!(err.to_string().contains("Unexpected argument: points.txt"));
+    }
+
+    #[test]
+    fn parse_from_iter_allows_input_passthrough_options_with_values() {
+        SolverOptions::parse_from_iter(["--lkh-exe=/bin/lkh", "--work-dir=/tmp/work"])
+            .expect("passthrough options should be accepted");
+    }
+
+    #[test]
+    fn parse_from_iter_requires_value_for_passthrough_options() {
+        let err =
+            SolverOptions::parse_from_iter(["--lkh-exe"]).expect_err("missing value should fail");
+        assert!(err.to_string().contains("Missing value for --lkh-exe"));
+    }
+
+    #[test]
+    fn parse_from_iter_help_returns_usage_error() {
+        let err = SolverOptions::parse_from_iter(["--help"]).expect_err("help should short-circuit");
+        assert!(err.to_string().contains("Usage:"));
     }
 }

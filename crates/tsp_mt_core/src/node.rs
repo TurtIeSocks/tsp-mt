@@ -55,3 +55,48 @@ impl fmt::Display for LKHNode {
         write!(f, "{},{}", b1.format(self.y), b2.format(self.x))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::LKHNode;
+
+    #[test]
+    fn new_stores_lat_in_y_and_lng_in_x() {
+        let node = LKHNode::new(12.5, -33.75);
+        assert_eq!(node.y, 12.5);
+        assert_eq!(node.x, -33.75);
+    }
+
+    #[test]
+    fn valid_bounds_are_accepted() {
+        assert!(LKHNode::new(-90.0, -180.0).is_valid());
+        assert!(LKHNode::new(90.0, 180.0).is_valid());
+    }
+
+    #[test]
+    fn invalid_values_are_rejected() {
+        assert!(!LKHNode::new(91.0, 0.0).is_valid());
+        assert!(!LKHNode::new(0.0, 181.0).is_valid());
+        assert!(!LKHNode::new(f64::NAN, 0.0).is_valid());
+        assert!(!LKHNode::new(0.0, f64::INFINITY).is_valid());
+    }
+
+    #[test]
+    fn dist_is_symmetric_and_zero_for_same_point() {
+        let a = LKHNode::new(37.7749, -122.4194);
+        let b = LKHNode::new(34.0522, -118.2437);
+
+        let dab = a.dist(&b);
+        let dba = b.dist(&a);
+        let daa = a.dist(&a);
+
+        assert!((dab - dba).abs() < 1e-6);
+        assert!(daa.abs() < 1e-12);
+    }
+
+    #[test]
+    fn display_formats_as_lat_lng() {
+        let node = LKHNode::new(1.5, -2.25);
+        assert_eq!(node.to_string(), "1.5,-2.25");
+    }
+}

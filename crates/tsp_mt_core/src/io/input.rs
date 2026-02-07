@@ -31,6 +31,20 @@ impl SolverInput {
     }
 
     pub fn from_args() -> Result<Self> {
+        let (mut input, saw_lkh_exe) = Self::parse_cli_args(env::args().skip(1))?;
+
+        if !saw_lkh_exe {
+            input.lkh_exe = embedded_lkh::ensure_lkh_executable()?;
+        }
+        input.points = read_points_from_stdin()?;
+        Ok(input)
+    }
+
+    fn parse_cli_args<I, S>(args: I) -> Result<(Self, bool)>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
         let mut input = Self {
             lkh_exe: PathBuf::new(),
             work_dir: default_work_dir(),
@@ -38,7 +52,10 @@ impl SolverInput {
         };
         let mut saw_lkh_exe = false;
 
-        let mut args = env::args().skip(1).peekable();
+        let mut args = args
+            .into_iter()
+            .map(|arg| arg.as_ref().to_owned())
+            .peekable();
         while let Some(arg) = args.next() {
             if arg == "--help" || arg == "-h" {
                 return Err(Error::invalid_input(Self::usage()));
@@ -53,11 +70,7 @@ impl SolverInput {
             }
         }
 
-        if !saw_lkh_exe {
-            input.lkh_exe = embedded_lkh::ensure_lkh_executable()?;
-        }
-        input.points = read_points_from_stdin()?;
-        Ok(input)
+        Ok((input, saw_lkh_exe))
     }
 
     pub fn usage() -> &'static str {
@@ -96,7 +109,10 @@ fn default_work_dir() -> PathBuf {
 fn read_points_from_stdin() -> Result<Vec<LKHNode>> {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input)?;
+    parse_points(&input)
+}
 
+fn parse_points(input: &str) -> Result<Vec<LKHNode>> {
     let mut points = Vec::new();
     for (idx, tok) in input.split_whitespace().enumerate() {
         let mut it = tok.split(',');
@@ -129,4 +145,69 @@ fn read_points_from_stdin() -> Result<Vec<LKHNode>> {
     }
 
     Ok(points)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SolverInput, parse_points};
+
+    #[test]
+    fn parse_cli_args_reads_lkh_exe_and_work_dir() {
+        let (input, saw_lkh) = SolverInput::parse_cli_args([
+            "--lkh-exe",
+            "/bin/lkh",
+            "--work-dir",
+            "/tmp/work",
+        ])
+        .expect("parse args");
+
+        assert!(saw_lkh);
+        assert_eq!(
+            input.lkh_path().to_str().expect("utf8 path"),
+            "/bin/lkh"
+        );
+        assert_eq!(
+            input.work_dir_path().to_str().expect("utf8 path"),
+            "/tmp/work"
+        );
+    }
+
+    #[test]
+    fn parse_cli_args_help_returns_usage_error() {
+        let err = SolverInput::parse_cli_args(["--help"]).expect_err("help should short-circuit");
+        assert!(err.to_string().contains("Input options:"));
+    }
+
+    #[test]
+    fn parse_cli_args_without_lkh_tracks_missing_lkh() {
+        let (_input, saw_lkh) =
+            SolverInput::parse_cli_args(["--work-dir", "/tmp/work"]).expect("parse args");
+        assert!(!saw_lkh);
+    }
+
+    #[test]
+    fn parse_points_parses_whitespace_separated_lat_lng_tokens() {
+        let points = parse_points("1.0,2.0\n3.0,4.0 5.0,6.0").expect("parse points");
+        assert_eq!(points.len(), 3);
+        assert_eq!(points[0].to_string(), "1.0,2.0");
+        assert_eq!(points[2].to_string(), "5.0,6.0");
+    }
+
+    #[test]
+    fn parse_points_rejects_empty_input() {
+        let err = parse_points(" \n\t ").expect_err("empty input should fail");
+        assert!(err.to_string().contains("No points provided on stdin."));
+    }
+
+    #[test]
+    fn parse_points_rejects_extra_comma_fields() {
+        let err = parse_points("1,2,3").expect_err("extra fields should fail");
+        assert!(err.to_string().contains("expected 'lat,lng'"));
+    }
+
+    #[test]
+    fn parse_points_rejects_non_numeric_coordinates() {
+        let err = parse_points("a,2").expect_err("invalid latitude should fail");
+        assert!(err.to_string().contains("invalid latitude"));
+    }
 }

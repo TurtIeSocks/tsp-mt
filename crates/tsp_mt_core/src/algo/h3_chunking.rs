@@ -121,3 +121,35 @@ impl H3Chunker {
         map.values().map(|v| v.len()).max().unwrap_or(0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::H3Chunker;
+    use crate::node::LKHNode;
+
+    #[test]
+    fn partition_indices_respects_max_bucket_size_and_preserves_all_indices() {
+        let input = vec![
+            LKHNode::new(37.7749, -122.4194),
+            LKHNode::new(37.7750, -122.4195),
+            LKHNode::new(37.7751, -122.4196),
+            LKHNode::new(34.0522, -118.2437),
+            LKHNode::new(40.7128, -74.0060),
+        ];
+
+        let chunks = H3Chunker::partition_indices(&input, 2).expect("partition should succeed");
+        assert!(!chunks.is_empty());
+        assert!(chunks.iter().all(|c| c.len() <= 2));
+
+        let mut flattened: Vec<usize> = chunks.into_iter().flatten().collect();
+        flattened.sort_unstable();
+        assert_eq!(flattened, vec![0, 1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn partition_indices_rejects_invalid_lat_lng() {
+        let input = vec![LKHNode::new(f64::NAN, 0.0)];
+        let err = H3Chunker::partition_indices(&input, 1).expect_err("expected invalid input");
+        assert!(err.to_string().contains("invalid lat/lng for H3"));
+    }
+}

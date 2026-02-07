@@ -107,3 +107,66 @@ pub fn tour_distance(points: &[LKHNode]) -> (f64, f64, i32) {
 
     (total, longest, spikes)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use super::{cleanup_workdir, tour_distance};
+    use crate::LKHNode;
+
+    fn unique_temp_dir(name: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("tsp-mt-tests-{name}-{nanos}"))
+    }
+
+    #[test]
+    fn cleanup_workdir_removes_existing_directory() {
+        let dir = unique_temp_dir("cleanup");
+        fs::create_dir_all(&dir).expect("create temp dir");
+        fs::write(dir.join("marker.txt"), b"ok").expect("write marker");
+
+        cleanup_workdir(&dir);
+
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn cleanup_workdir_ignores_missing_directory() {
+        let dir = unique_temp_dir("missing");
+        cleanup_workdir(&dir);
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn tour_distance_for_short_inputs_is_zeroed() {
+        let empty: Vec<LKHNode> = vec![];
+        let one = vec![LKHNode::new(0.0, 0.0)];
+
+        assert_eq!(tour_distance(&empty), (0.0, 0.0, 0));
+        assert_eq!(tour_distance(&one), (0.0, 0.0, 0));
+    }
+
+    #[test]
+    fn tour_distance_matches_open_path_sum_and_longest_edge() {
+        let pts = vec![
+            LKHNode::new(0.0, 0.0),
+            LKHNode::new(0.0, 1.0),
+            LKHNode::new(0.0, 2.0),
+        ];
+        let d1 = pts[0].dist(&pts[1]);
+        let d2 = pts[1].dist(&pts[2]);
+
+        let (total, longest, spikes) = tour_distance(&pts);
+
+        assert!((total - (d1 + d2)).abs() < 1e-6);
+        assert!((longest - d1.max(d2)).abs() < 1e-6);
+        assert_eq!(spikes, 0);
+    }
+}

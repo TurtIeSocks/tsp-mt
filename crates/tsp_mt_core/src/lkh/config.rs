@@ -83,3 +83,44 @@ impl Default for LkhConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        LkhConfig, MAX_MAX_TRIALS, MAX_TRIALS_MULTIPLIER, MIN_MAX_TRIALS, MIN_TIME_LIMIT_SECONDS,
+    };
+
+    #[test]
+    fn new_clamps_trials_and_time_limit() {
+        let small = LkhConfig::new(1);
+        let large = LkhConfig::new(1_000_000);
+
+        let small_text = small.param_file();
+        let large_text = large.param_file();
+
+        assert!(small_text.contains(&format!("MAX_TRIALS = {MIN_MAX_TRIALS}")));
+        assert!(small_text.contains(&format!("TIME_LIMIT = {MIN_TIME_LIMIT_SECONDS}")));
+        assert!(large_text.contains(&format!("MAX_TRIALS = {MAX_MAX_TRIALS}")));
+        assert!(!large_text.contains(&format!(
+            "MAX_TRIALS = {}",
+            1_000_000 * MAX_TRIALS_MULTIPLIER
+        )));
+    }
+
+    #[test]
+    fn preprocessing_uses_single_run_and_fixed_time_limit() {
+        let cfg = LkhConfig::preprocessing(123);
+        let text = cfg.param_file();
+        assert!(text.contains("RUNS = 1"));
+        assert!(text.contains("MAX_TRIALS = 123"));
+        assert!(text.contains("TIME_LIMIT = 1"));
+    }
+
+    #[test]
+    fn generate_seeds_is_deterministic_for_default_seed() {
+        let cfg = LkhConfig::default();
+        let a = cfg.generate_seeds(4);
+        let b = cfg.generate_seeds(4);
+        assert_eq!(a, b);
+    }
+}
