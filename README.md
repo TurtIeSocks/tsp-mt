@@ -119,22 +119,24 @@ target/release/tsp-mt [args] < points.txt > output.txt
 All arguments are long-form flags.
 Both `--flag value` and `--flag=value` work.
 
-| Argument                              | Type  |   Default | Notes                                                                  |
-| ------------------------------------- | ----- | --------: | ---------------------------------------------------------------------- |
-| `--lkh-exe <path>`                    | path  |      auto | Use this LKH executable instead of extracted embedded one              |
-| `--work-dir <path>`                   | path  | `./.temp` | Temp/output workspace for run artifacts                                |
-| `--projection-radius <f64>`           | float |    `70.0` | Must be `> 0`                                                          |
-| `--max-chunk-size <usize>`            | int   |    `5000` | Must be `> 0`; above this input size, H3 chunked solver is used        |
-| `--centroid-order-seed <u64>`         | int   |     `999` | Seed for chunk-centroid ordering run                                   |
-| `--centroid-order-max-trials <usize>` | int   |   `20000` | LKH `MAX_TRIALS` for centroid ordering                                 |
-| `--centroid-order-time-limit <usize>` | int   |      `10` | LKH `TIME_LIMIT` seconds for centroid ordering                         |
-| `--boundary-2opt-window <usize>`      | int   |     `500` | Boundary-local 2-opt window during chunk stitching                     |
-| `--boundary-2opt-passes <usize>`      | int   |      `50` | Boundary-local 2-opt passes during chunk stitching                     |
-| `--verbose` / `--verbose=<bool>`      | bool  |    `true` | Enables progress logs to `stderr`                                      |
-| `--no-verbose`                        | flag  |       n/a | Forces `verbose=false`                                                 |
-| `--help`, `-h`                        | flag  |       n/a | Prints usage and exits (currently shows input-option usage text first) |
+| Argument                              | Type               |          Default | Notes                                                                             |
+| ------------------------------------- | ------------------ | ---------------: | --------------------------------------------------------------------------------- |
+| `--lkh-exe <path>`                    | path               |           `auto` | Use this LKH executable instead of extracted embedded one                         |
+| `--work-dir <path>`                   | path               |       `<cwd>/.temp` | Temp/output workspace for run artifacts                                           |
+| `--projection-radius <f64>`           | float              |           `70.0` | Must be `> 0`                                                                     |
+| `--max-chunk-size <usize>`            | int                |           `5000` | Must be `> 0`; above this input size, H3 chunked solver is used                  |
+| `--centroid-order-seed <u64>`         | int                |            `999` | Seed for chunk-centroid ordering run                                              |
+| `--centroid-order-max-trials <usize>` | int                |          `20000` | LKH `MAX_TRIALS` for centroid ordering                                            |
+| `--centroid-order-time-limit <usize>` | int                |             `10` | LKH `TIME_LIMIT` seconds for centroid ordering                                    |
+| `--boundary-2opt-window <usize>`      | int                |            `500` | Boundary-local 2-opt window during chunk stitching                                |
+| `--boundary-2opt-passes <usize>`      | int                |             `50` | Boundary-local 2-opt passes during chunk stitching                                |
+| `--log-level <value>`                 | enum               |          `warn` | One of: `error`, `warn`, `warning`, `info`, `debug`, `trace`, `off`              |
+| `--log-format <value>`                | enum               |       `compact` | One of: `compact`, `pretty`                                                       |
+| `--log-timestamp[=<bool>]`            | bool (optional val) |          `true` | If provided without value, sets to `true`                                         |
+| `--no-log-timestamp`                  | flag               |            `n/a` | Forces `log_timestamp=false`                                                      |
+| `--help`, `-h`                        | flag               |            `n/a` | Prints usage and exits                                                            |
 
-Accepted boolean values for `--verbose=<bool>`:  
+Accepted boolean values for `--log-timestamp=<bool>`:  
 `1/0`, `true/false`, `yes/no`, `on/off` (common case variants supported).
 
 ## Common Errors
