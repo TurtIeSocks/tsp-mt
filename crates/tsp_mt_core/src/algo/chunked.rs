@@ -156,11 +156,11 @@ pub fn solve_tsp_with_lkh_h3_chunked(
 
     if input.n() <= options.max_chunk_size {
         log::info!(
-            "chunked: bypass n={} max_chunk_size={} mode=parallel",
+            "chunker: bypass n={} max_chunk_size={} mode=parallel",
             input.n(),
             options.max_chunk_size
         );
-        return super::solve_tsp_with_lkh_parallel(input, options);
+        return crate::solve_tsp_with_lkh_parallel(input, options);
     }
 
     let global_coords = PlaneProjection::new(&input.points)
@@ -169,7 +169,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
 
     let chunks = H3Chunker::partition_indices(&input.points, options.max_chunk_size)?;
     log::info!(
-        "chunked: partitioned n={} chunks={} max_chunk_size={}",
+        "chunker: partitioned n={} chunks={} max_chunk_size={}",
         input.n(),
         chunks.len(),
         options.max_chunk_size
@@ -188,7 +188,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
             let tour_global: Vec<usize> = tour_local.into_iter().map(|li| idxs[li]).collect();
 
             log::info!(
-                "chunked.chunk: done chunk_id={chunk_id} n={} secs={:.2}",
+                "chunk: done id={chunk_id} n={} secs={:.2}",
                 idxs.len(),
                 now.elapsed().as_secs_f32()
             );
@@ -202,7 +202,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         .map(|idxs| TourGeometry::centroid_of_indices(&global_coords, idxs))
         .collect();
 
-    log::info!("chunked: ordering centroids count={}", centroids.len());
+    log::info!("chunker: ordering centroids count={}", centroids.len());
     let order_dir = input.work_dir.join(CHUNK_ORDER_DIR);
     let order =
         chunk_solver.order_by_centroid_tsp(&input.lkh_exe, &order_dir, &centroids, &options)?;
@@ -215,7 +215,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
     let (mut merged, boundaries) =
         TourStitcher::stitch_chunk_tours_dense(&global_coords, ordered_tours);
     log::info!(
-        "chunked: stitched n={} boundaries={}",
+        "chunker: stitched n={} boundaries={}",
         merged.len(),
         boundaries.len()
     );
@@ -228,7 +228,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         options.boundary_2opt_passes,
     );
     log::info!(
-        "chunked: complete n={} chunks={}",
+        "chunker: complete n={} chunks={}",
         merged.len(),
         chunks.len()
     );

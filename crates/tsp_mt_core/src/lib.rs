@@ -1,28 +1,24 @@
 //! High-performance TSP solving on geographic coordinates using external LKH runs.
 //! Includes direct parallel solving and H3 chunked solving for large inputs.
 
-mod chunked;
-mod config;
+mod algo;
 mod constants;
-mod embedded_lkh;
 mod error;
-mod geometry;
-mod h3_chunking;
-mod input;
+mod geo;
+mod io;
+mod lkh;
 pub mod logging;
 mod node;
-mod options;
-mod problem;
-mod process;
-mod projection;
-mod run_spec;
-mod solver;
-mod stitching;
 pub mod utils;
 
-pub use chunked::solve_tsp_with_lkh_h3_chunked;
+pub(crate) use algo::{h3_chunking, stitching};
+pub(crate) use geo::{geometry, projection};
+pub(crate) use io::options;
+pub(crate) use lkh::{config, embedded_lkh, problem, process, run_spec, solver};
+
+pub use algo::chunked::solve_tsp_with_lkh_h3_chunked;
 pub use error::{Error, Result};
-pub use input::SolverInput;
+pub use io::input::SolverInput;
 pub use node::LKHNode;
-pub use options::SolverOptions;
-pub use solver::solve_tsp_with_lkh_parallel;
+pub use io::options::SolverOptions;
+pub use lkh::solver::solve_tsp_with_lkh_parallel;
