@@ -1,78 +1,51 @@
 use std::{env, time::Instant};
 
-// use crate::{first::WrapperOptions};
-
-// mod first;
-// mod outlier_repair;
-// mod outlier_v2;
-mod old;
-mod outliers;
-mod virus;
-// mod recursive;
-mod processing;
+mod lkh;
+// mod outliers;
+// mod processing;
+mod project;
+// mod stats;
+// mod tsp;
 mod utils;
 
 fn main() -> std::io::Result<()> {
     let now = Instant::now();
-
-    // let points = vec![
-    //     Point { lat: 40.0, lng: -73.0 },
-    //     Point { lat: 40.1, lng: -73.1 },
-    //     // ...
-    // ];
 
     let Ok(points) = utils::read_points_from_stdin() else {
         panic!("can't create points");
     };
 
     eprintln!("Input length: {}", points.len());
+    eprintln!();
 
-    let mut path = env::current_dir()?;
-    path.push("tsp");
-    let path = format!("{}", path.to_str().unwrap_or_default());
+    let current = env::current_dir()?;
+    let lkh = current.join("lkh/LKH-3.0.13/LKH");
+    let work_dir = current.join("temp");
 
-    let args = parse_args();
-    let opts = old::Options {
-        tsp_path: path.into(),
-        leaf_size: args.leaf_size,
-        max_leaf_size: args.max_leaf_size,
-        // portals: args.portals,
-        // seam_refine: args.seam_refine,
-        ..Default::default()
-    };
+    eprintln!("Workdir: {:?} | LKH: {lkh:?}", &work_dir);
 
-    let route = old::solve(&points, &opts)?;
+    let route = lkh::solve_tsp_with_lkh_h3_chunked(&lkh, &work_dir, &points)?;
+    // let path = format!("{}", path.to_str().unwrap_or_default());
 
-    // let route = match recursive::solve_tsp_parallel(
-    //     &points,
-    //     &Options {
-    //         tsp_path: path.clone(),
-    //         ..Default::default()
-    //     },
-    // ) {
-    //     Ok(points) => points,
-    //     Err(err) => panic!("TSP run error: {:?}", err),
+    // let args = parse_args();
+    // let opts = tsp::Options {
+    //     tsp_path: path.into(),
+    //     leaf_size: args.leaf_size,
+    //     max_leaf_size: args.max_leaf_size,
+    //     // portals: args.portals,
+    //     // seam_refine: args.seam_refine,
+    //     ..Default::default()
     // };
 
-    // let route = match first::solve_parallel_tsp(
-    //     &points,
-    //     &WrapperOptions {
-    //         tsp_path: path.clone(),
-    //         ..Default::default()
-    //     },
-    // ) {
-    //     Ok(points) => points,
-    //     Err(err) => panic!("TSP run error: {:?}", err),
-    // };
+    // let route = tsp::solve(&points, &opts)?;
+    // let route = route.into_iter().map(|idx| points[idx]).collect::<Vec<_>>();
 
     for point in route.iter() {
         println!("{}", point.to_string());
     }
 
     eprintln!("Output length: {}", route.len());
-    // eprintln!("Unique length: {}", seen.len());
     eprintln!("Time: {:.2}", now.elapsed().as_secs_f32());
-    eprintln!();
 
     utils::measure_distance_open(&route);
     // run_single(&path, &points);
@@ -80,57 +53,57 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-struct Args {
-    leaf_size: usize,
-    max_leaf_size: usize,
-    // portals: usize,
-    // seam_refine: bool,
-}
+// struct Args {
+//     leaf_size: usize,
+//     max_leaf_size: usize,
+//     // portals: usize,
+//     // seam_refine: bool,
+// }
 
-fn parse_args() -> Args {
-    let mut args = env::args().skip(1);
+// fn parse_args() -> Args {
+//     let mut args = env::args().skip(1);
 
-    let mut out = Args {
-        leaf_size: virus::Options::default().leaf_size,
-        max_leaf_size: virus::Options::default().max_leaf_size,
-        // portals: virus::Options::default().portals,
-        // seam_refine: virus::Options::default().seam_refine,
-    };
+//     let mut out = Args {
+//         leaf_size: tsp::Options::default().leaf_size,
+//         max_leaf_size: tsp::Options::default().max_leaf_size,
+//         // portals: old::Options::default().portals,
+//         // seam_refine: old::Options::default().seam_refine,
+//     };
 
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--leaf_size" => {
-                let v = args.next().expect("missing value for --leaf_size");
-                out.leaf_size = v.parse().expect("invalid --leaf_size");
-            }
-            "--max_leaf_size" => {
-                let v = args.next().expect("missing value for --max_leaf_size");
-                out.max_leaf_size = v.parse().expect("invalid --max_leaf_size");
-            }
-            // "--portals" => {
-            //     let v = args.next().expect("missing value for --portals");
-            //     out.portals = v.parse().expect("invalid --portals");
-            // }
-            // "--seam_refine" => {
-            //     let v = args.next().expect("missing value for --seam_refine");
-            //     out.seam_refine = parse_bool(&v).expect("invalid --seam_refine");
-            // }
-            _ => {
-                panic!("unknown arg: {arg}");
-            }
-        }
-    }
+//     while let Some(arg) = args.next() {
+//         match arg.as_str() {
+//             "--leaf_size" => {
+//                 let v = args.next().expect("missing value for --leaf_size");
+//                 out.leaf_size = v.parse().expect("invalid --leaf_size");
+//             }
+//             "--max_leaf_size" => {
+//                 let v = args.next().expect("missing value for --max_leaf_size");
+//                 out.max_leaf_size = v.parse().expect("invalid --max_leaf_size");
+//             }
+//             // "--portals" => {
+//             //     let v = args.next().expect("missing value for --portals");
+//             //     out.portals = v.parse().expect("invalid --portals");
+//             // }
+//             // "--seam_refine" => {
+//             //     let v = args.next().expect("missing value for --seam_refine");
+//             //     out.seam_refine = parse_bool(&v).expect("invalid --seam_refine");
+//             // }
+//             _ => {
+//                 panic!("unknown arg: {arg}");
+//             }
+//         }
+//     }
 
-    out
-}
+//     out
+// }
 
-fn parse_bool(s: &str) -> Option<bool> {
-    match s.to_ascii_lowercase().as_str() {
-        "true" | "1" | "yes" | "y" | "on" => Some(true),
-        "false" | "0" | "no" | "n" | "off" => Some(false),
-        _ => None,
-    }
-}
+// fn parse_bool(s: &str) -> Option<bool> {
+//     match s.to_ascii_lowercase().as_str() {
+//         "true" | "1" | "yes" | "y" | "on" => Some(true),
+//         "false" | "0" | "no" | "n" | "off" => Some(false),
+//         _ => None,
+//     }
+// }
 
 // fn run_single(path: &str, points: &[read_points::Point]) {
 //     eprintln!("Running single TSP now");

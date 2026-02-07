@@ -20,9 +20,9 @@ use crate::utils::Point;
 /// Where we want the targeted cycle edge to land after rotation (OPEN view edge index).
 #[derive(Clone, Copy, Debug)]
 pub enum TargetEdgePos {
-    Front,
+    // Front,
     Middle,
-    Back,
+    // Back,
 }
 
 #[inline]
@@ -31,9 +31,9 @@ fn desired_edge_index(n: usize, pos: TargetEdgePos) -> usize {
         return 0;
     }
     match pos {
-        TargetEdgePos::Front => 0,
+        // TargetEdgePos::Front => 0,
         TargetEdgePos::Middle => (n / 2).saturating_sub(1).min(n - 2),
-        TargetEdgePos::Back => n - 2,
+        // TargetEdgePos::Back => n - 2,
     }
 }
 
@@ -206,7 +206,12 @@ pub fn outlier_splice_repair_v6_par(route: &mut Vec<Point>, opt: &BroadOptions) 
             }
         }
 
-        let hot = top_k_long_edges(&edge_len, opt.hot_edges.max(1));
+        // Prefer threshold-based selection so we don't do 64 full passes when there are only ~10 spikes.
+        let mut hot = spike_edges_by_threshold(&edge_len, 7.5, opt.hot_edges.max(1));
+        if hot.is_empty() {
+            // Fallback: if nothing crosses threshold, just take a small top-k
+            hot = top_k_long_edges(&edge_len, opt.hot_edges.min(12).max(1));
+        }
 
         for (t, &edge_idx) in hot.iter().enumerate() {
             let shift = rotation_for_edge(n, edge_idx, desired_edge);
@@ -259,7 +264,12 @@ pub fn outlier_splice_repair_v6_par_sniper(route: &mut Vec<Point>, opt: &SniperO
             }
         }
 
-        let hot = top_k_long_edges(&edge_len, opt.hot_edges.max(1));
+        // Prefer threshold-based selection so we don't do 64 full passes when there are only ~10 spikes.
+        let mut hot = spike_edges_by_threshold(&edge_len, 7.5, opt.hot_edges.max(1));
+        if hot.is_empty() {
+            // Fallback: if nothing crosses threshold, just take a small top-k
+            hot = top_k_long_edges(&edge_len, opt.hot_edges.min(12).max(1));
+        }
 
         for (t, &edge_idx) in hot.iter().enumerate() {
             let shift = rotation_for_edge(n, edge_idx, desired_edge);
@@ -355,10 +365,10 @@ mod open_broad {
         }
 
         // ---------- helpers ----------
-        #[inline]
-        fn edge_len(route: &[Point], i: usize) -> f64 {
-            route[i].dist(&route[i + 1])
-        }
+        // #[inline]
+        // fn edge_len(route: &[Point], i: usize) -> f64 {
+        //     route[i].dist(&route[i + 1])
+        // }
 
         #[inline]
         fn window_bounds(n: usize, center_edge: usize, window: usize) -> (usize, usize) {
@@ -1008,10 +1018,10 @@ mod open_sniper {
         }
 
         // ---------- helpers ----------
-        #[inline]
-        fn edge_len(route: &[Point], i: usize) -> f64 {
-            route[i].dist(&route[i + 1])
-        }
+        // #[inline]
+        // fn edge_len(route: &[Point], i: usize) -> f64 {
+        //     route[i].dist(&route[i + 1])
+        // }
 
         #[inline]
         fn window_bounds(n_nodes: usize, center_edge: usize, window: usize) -> (usize, usize) {
@@ -1509,4 +1519,22 @@ mod open_sniper {
 
         debug_assert_eq!(route.len(), n0, "sniper must not change point count");
     }
+}
+
+fn spike_edges_by_threshold(edge_len: &[f64], ratio_gate: f64, cap: usize) -> Vec<usize> {
+    if edge_len.is_empty() {
+        return Vec::new();
+    }
+    let mean = mean_cycle_edge(edge_len).max(1e-9);
+
+    let mut idxs: Vec<usize> = edge_len
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &d)| if d > ratio_gate * mean { Some(i) } else { None })
+        .collect();
+
+    // Sort by length descending, keep cap
+    idxs.sort_by(|&i, &j| edge_len[j].partial_cmp(&edge_len[i]).unwrap());
+    idxs.truncate(cap.min(idxs.len()));
+    idxs
 }

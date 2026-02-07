@@ -21,5 +21,9 @@ target/
 /target
 *.txt
 tsp
+!src/tsp
 /old
 /or-tools
+/temp/*
+lkh/LKH-*
+lkh/*.tgz
