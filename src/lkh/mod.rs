@@ -27,7 +27,9 @@ pub struct LkhConfig {
     trace_level: usize,
     /// Seconds to run LKH
     time_limit: usize,
+    max_candidates: usize,
 }
+// SUBGRADIENT = NO
 
 impl LkhConfig {
     pub fn new(n: usize) -> Self {
@@ -38,17 +40,24 @@ impl LkhConfig {
         }
     }
 
-    fn threads(&self) -> usize {
-        thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(2)
-            .max(2)
-            - 1
-    }
-
+    /// Deterministic seed generation; replace with your favorite scheme.
+    /// Produces `count` distinct u64 seeds from `base_seed`.
     fn generate_seeds(&self, count: usize) -> Vec<u64> {
         let mut rng = StdRng::seed_from_u64(self.base_seed);
         (0..count).map(|_| rng.random::<u64>()).collect()
+    }
+
+    fn param_file(&self) -> String {
+        format!(
+            "\
+RUNS = {}
+MAX_TRIALS = {}
+TRACE_LEVEL = {}
+TIME_LIMIT = {}
+MAX_CANDIDATES = {} SYMMETRIC
+",
+            self.runs, self.max_trials, self.trace_level, self.time_limit, self.max_candidates
+        )
     }
 }
 
@@ -60,20 +69,21 @@ impl Default for LkhConfig {
             base_seed: 12345,
             trace_level: 1,
             time_limit: 60,
+            max_candidates: 32,
         }
     }
 }
 
-struct LKHSolver<'a> {
-    executable: &'a Path,
-    work_dir: &'a Path,
+struct LKHSolver {
+    executable: PathBuf,
+    work_dir: PathBuf,
     problem_file: PathBuf,
     candidate_file: PathBuf,
     pi_file: PathBuf,
 }
 
-impl<'a> LKHSolver<'a> {
-    fn new(executable: &'a Path, work_dir: &'a Path) -> Self {
+impl LKHSolver {
+    fn new(executable: PathBuf, work_dir: PathBuf) -> Self {
         let problem_file = work_dir.join("problem.tsp");
         let candidate_file = work_dir.join("problem.cand");
         let pi_file = work_dir.join("problem.pi");
@@ -87,10 +97,32 @@ impl<'a> LKHSolver<'a> {
         }
     }
 
-    fn create_work_dir(&self) -> io::Result<()> {
-        fs::create_dir_all(self.work_dir)
+    fn threads() -> usize {
+        thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(2)
+            .max(2)
+            - 1
     }
 
+    fn create_work_dir(&self) -> io::Result<()> {
+        fs::create_dir_all(&self.work_dir)
+    }
+
+    fn param_file(&self) -> String {
+        format!(
+            "\
+PROBLEM_FILE = {}
+CANDIDATE_FILE = {}
+PI_FILE = {}
+",
+            self.problem_file.display(),
+            self.candidate_file.display(),
+            self.pi_file.display(),
+        )
+    }
+
+    /// Write TSPLIB EUC_2D problem using projected XY.
     fn create_problem_file(&self, points: &[Coord]) -> io::Result<()> {
         let mut s = String::new();
         s.push_str("NAME: problem\n");
@@ -123,20 +155,18 @@ impl<'a> LKHSolver<'a> {
         };
 
         rs.write_lkh_par(
-            &self.problem_file,
-            &self.candidate_file,
-            &self.pi_file,
             &LkhConfig {
                 max_trials: n,
                 runs: 1,
                 time_limit: 1,
                 ..Default::default()
             },
+            &self,
         )?;
 
-        let out = Command::new(self.executable)
+        let out = Command::new(&self.executable)
             .arg(&prep_par)
-            .current_dir(self.work_dir)
+            .current_dir(&self.work_dir)
             .output()?;
 
         if !out.status.success() {
@@ -170,16 +200,18 @@ fn rm_file(pb: &PathBuf) {
     }
 }
 
-impl<'a> Drop for LKHSolver<'a> {
+impl Drop for LKHSolver {
     fn drop(&mut self) {
         rm_file(&self.candidate_file);
         rm_file(&self.pi_file);
     }
 }
 
+/// Solve TSP by spawning multiple LKH processes in parallel with different SEEDs.
+/// Returns best tour points.
 pub fn solve_tsp_with_lkh_parallel(
-    lkh_exe: &Path,
-    work_dir: &Path,
+    lkh_exe: PathBuf,
+    work_dir: PathBuf,
     input: &[Point],
 ) -> io::Result<Vec<Point>> {
     if input.len() < 3 {
@@ -192,13 +224,12 @@ pub fn solve_tsp_with_lkh_parallel(
     let solver = LKHSolver::new(lkh_exe, work_dir);
     solver.create_work_dir()?;
 
-    let plane = Plane::new(&input.to_vec()).radius(70.0);
-    let points = plane.project();
+    let points = Plane::new(&input.to_vec()).radius(70.0).project();
 
     solver.create_problem_file(&points)?;
     solver.ensure_candidate_file(points.len())?;
 
-    let parallelism = cfg.threads();
+    let parallelism = LKHSolver::threads();
 
     eprintln!(
         "Starting LKH for {} points and will run for {}s across {parallelism} threads",
@@ -219,22 +250,17 @@ pub fn solve_tsp_with_lkh_parallel(
                 let rs = RunSpec {
                     idx,
                     seed,
-                    par_path: work_dir.join(format!("run_{idx}.par")),
-                    tour_path: work_dir.join(format!("run_{idx}.tour")),
+                    par_path: solver.work_dir.join(format!("run_{idx}.par")),
+                    tour_path: solver.work_dir.join(format!("run_{idx}.tour")),
                 };
-                rs.write_lkh_par(
-                    &solver.problem_file,
-                    &solver.candidate_file,
-                    &solver.pi_file,
-                    &cfg,
-                )?;
+                rs.write_lkh_par(&cfg, &solver)?;
 
                 let now = Instant::now();
                 eprintln!("Starting tour for thread {idx}");
 
-                let out = Command::new(solver.executable)
+                let out = Command::new(&solver.executable)
                     .arg(&rs.par_path)
-                    .current_dir(work_dir)
+                    .current_dir(&solver.work_dir)
                     .output()?;
 
                 if !out.status.success() {
@@ -279,40 +305,26 @@ struct RunSpec {
 }
 
 impl RunSpec {
-    fn write_lkh_par(
-        &self,
-        problem_path: &Path,
-        candidate_path: &Path,
-        pi_path: &Path,
-        cfg: &LkhConfig,
-    ) -> io::Result<()> {
-        let s = format!(
-            "\
-PROBLEM_FILE = {}
-OUTPUT_TOUR_FILE = {}
-RUNS = {}
-MAX_TRIALS = {}
-SEED = {}
-TRACE_LEVEL = {}
-TIME_LIMIT = {}
-CANDIDATE_FILE = {}
-PI_FILE = {}
-MAX_CANDIDATES = 32 SYMMETRIC
-",
-            problem_path.display(),
+    fn param_file(&self) -> String {
+        format!(
+            "OUTPUT_TOUR_FILE = {}\nSEED = {}",
             self.tour_path.display(),
-            cfg.runs,
-            cfg.max_trials,
             self.seed,
-            cfg.trace_level,
-            cfg.time_limit,
-            candidate_path.display(),
-            pi_path.display(),
+        )
+    }
+
+    fn write_lkh_par(&self, cfg: &LkhConfig, solver: &LKHSolver) -> io::Result<()> {
+        let s = format!(
+            "{}\n{}\n{}",
+            self.param_file(),
+            cfg.param_file(),
+            solver.param_file()
         );
 
         fs::write(&self.par_path, s)
     }
 
+    /// Small-problem par writer for centroid ordering.
     fn write_lkh_par_small(
         &self,
         problem_path: &Path,
@@ -336,6 +348,9 @@ MAX_CANDIDATES = 32 SYMMETRIC
             self.seed,
             time_limit,
         );
+        //     PI_FILE = 0
+        // SUBGRADIENT = NO
+
         fs::write(&self.par_path, s)
     }
 
@@ -763,8 +778,8 @@ fn boundary_two_opt(
 //
 
 fn solve_chunk_single(
-    lkh_exe: &Path,
-    work_dir: &Path,
+    lkh_exe: PathBuf,
+    work_dir: PathBuf,
     chunk_points: &[Point],
 ) -> io::Result<Vec<usize>> {
     let n = chunk_points.len();
@@ -780,8 +795,7 @@ fn solve_chunk_single(
     let solver = LKHSolver::new(lkh_exe, work_dir);
     solver.create_work_dir()?;
 
-    let plane = Plane::new(&chunk_points.to_vec()).radius(70.0);
-    let pts = plane.project();
+    let pts = Plane::new(&chunk_points.to_vec()).radius(70.0).project();
 
     solver.create_problem_file(&pts)?;
     solver.ensure_candidate_file(pts.len())?;
@@ -789,19 +803,14 @@ fn solve_chunk_single(
     let rs = RunSpec {
         idx: 0,
         seed: cfg.base_seed,
-        par_path: work_dir.join("run_0.par"),
-        tour_path: work_dir.join("run_0.tour"),
+        par_path: solver.work_dir.join("run_0.par"),
+        tour_path: solver.work_dir.join("run_0.tour"),
     };
-    rs.write_lkh_par(
-        &solver.problem_file,
-        &solver.candidate_file,
-        &solver.pi_file,
-        &cfg,
-    )?;
+    rs.write_lkh_par(&cfg, &solver)?;
 
-    let out = Command::new(solver.executable)
+    let out = Command::new(&solver.executable)
         .arg(&rs.par_path)
-        .current_dir(work_dir)
+        .current_dir(&solver.work_dir)
         .output()?;
 
     if !out.status.success() {
@@ -873,8 +882,8 @@ fn order_chunks_by_centroid_tsp(
 }
 
 pub fn solve_tsp_with_lkh_h3_chunked(
-    lkh_exe: &Path,
-    work_dir: &Path,
+    lkh_exe: PathBuf,
+    work_dir: PathBuf,
     input: &[Point],
 ) -> io::Result<Vec<Point>> {
     const MAX_CHUNK: usize = 5_000;
@@ -883,8 +892,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         return solve_tsp_with_lkh_parallel(lkh_exe, work_dir, input);
     }
 
-    let global_plane = Plane::new(&input.to_vec()).radius(70.0);
-    let global_coords = global_plane.project();
+    let global_coords = Plane::new(&input.to_vec()).radius(70.0).project();
 
     let chunks = h3_partition_indices(input, MAX_CHUNK);
     eprintln!(
@@ -902,7 +910,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
             let chunk_dir = work_dir.join(format!("chunk_{chunk_id}"));
 
             let now = Instant::now();
-            let tour_local = solve_chunk_single(lkh_exe, &chunk_dir, &chunk_points)?;
+            let tour_local = solve_chunk_single(lkh_exe.clone(), chunk_dir, &chunk_points)?;
             let tour_global: Vec<usize> = tour_local.into_iter().map(|li| idxs[li]).collect();
 
             eprintln!(
@@ -921,7 +929,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         .collect();
 
     let order_dir = work_dir.join("chunk_order");
-    let order = order_chunks_by_centroid_tsp(lkh_exe, &order_dir, &centroids)?;
+    let order = order_chunks_by_centroid_tsp(&lkh_exe, &order_dir, &centroids)?;
 
     let mut ordered_tours: Vec<Vec<usize>> = Vec::with_capacity(solved_chunk_tours.len());
     for ci in order {

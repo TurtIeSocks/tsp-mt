@@ -24,7 +24,7 @@ fn main() -> std::io::Result<()> {
 
     eprintln!("Workdir: {:?} | LKH: {lkh:?}", &work_dir);
 
-    let route = lkh::solve_tsp_with_lkh_h3_chunked(&lkh, &work_dir, &points)?;
+    let route = lkh::solve_tsp_with_lkh_h3_chunked(lkh, work_dir, &points)?;
     // let path = format!("{}", path.to_str().unwrap_or_default());
 
     // let args = parse_args();
