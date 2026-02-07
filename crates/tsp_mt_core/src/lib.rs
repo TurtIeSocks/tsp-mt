@@ -19,6 +19,6 @@ pub(crate) use lkh::{config, embedded_lkh, problem, process, run_spec, solver};
 pub use algo::chunked::solve_tsp_with_lkh_h3_chunked;
 pub use error::{Error, Result};
 pub use io::input::SolverInput;
-pub use node::LKHNode;
 pub use io::options::SolverOptions;
 pub use lkh::solver::solve_tsp_with_lkh_parallel;
+pub use node::LKHNode;

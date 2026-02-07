@@ -39,10 +39,10 @@ pub(crate) fn register_workdir_for_shutdown_cleanup(work_dir: &Path) {
 }
 
 fn unregister_workdir_for_shutdown_cleanup(work_dir: &Path) {
-    if let Some(set) = SHUTDOWN_WORKDIRS.get() {
-        if let Ok(mut guard) = set.lock() {
-            guard.remove(work_dir);
-        }
+    if let Some(set) = SHUTDOWN_WORKDIRS.get()
+        && let Ok(mut guard) = set.lock()
+    {
+        guard.remove(work_dir);
     }
 }
 

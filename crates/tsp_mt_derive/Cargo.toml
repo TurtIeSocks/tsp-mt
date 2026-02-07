@@ -2,6 +2,11 @@
 name = "tsp_mt_derive"
 version = "0.1.0"
 edition = "2024"
+description = "Proc-macros for tsp-mt CLI parsing and structured logging/timing helpers"
+license = "Apache-2.0"
+readme = "../../README.md"
+keywords = ["proc-macro", "cli", "derive", "tsp-mt"]
+categories = ["development-tools::procedural-macro-helpers"]
 
 [lib]
 proc-macro = true

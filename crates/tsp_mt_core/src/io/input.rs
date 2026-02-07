@@ -22,10 +22,10 @@ pub struct SolverInput {
 }
 
 impl SolverInput {
-    pub fn new(lkh_exe: &PathBuf, work_dir: &PathBuf, points: &[LKHNode]) -> Self {
+    pub fn new(lkh_exe: &Path, work_dir: &Path, points: &[LKHNode]) -> Self {
         Self {
-            lkh_exe: lkh_exe.clone(),
-            work_dir: work_dir.clone(),
+            lkh_exe: lkh_exe.to_path_buf(),
+            work_dir: work_dir.to_path_buf(),
             points: points.to_vec(),
         }
     }

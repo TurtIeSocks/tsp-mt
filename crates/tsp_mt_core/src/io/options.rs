@@ -166,19 +166,15 @@ impl SolverOptions {
             "  --boundary-2opt-window <usize>\n",
             "  --boundary-2opt-passes <usize>\n",
             "  --log-level <error|warn|info|debug|trace|off>\n",
-            "  --log-target <stderr|stdout>\n",
             "  --log-format <compact|pretty>\n",
             "  --log-timestamp[=<bool>]\n",
             "  --no-log-timestamp\n",
-            "  --quiet\n",
-            "  --verbose[=<bool>] (deprecated alias for --log-level info/warn)\n",
-            "  --no-verbose (deprecated alias for --log-level warn)\n",
             "  --help\n",
             "\n",
             "Examples:\n",
-            "  tsp-mt --max-chunk-size 2000 --quiet < points.txt\n",
+            "  tsp-mt --max-chunk-size 2000 --log-level warn < points.txt > output.txt\n",
             "  tsp-mt --log-level=debug --log-format=pretty --log-timestamp < points.txt\n",
-            "  tsp-mt --projection-radius=100 --log-target=stderr < points.txt\n",
+            "  tsp-mt --projection-radius=100 --log-level=info < points.txt\n",
         )
     }
 }

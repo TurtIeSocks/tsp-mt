@@ -3,6 +3,11 @@ name = "tsp_mt_core"
 version = "0.1.0"
 edition = "2024"
 build = "build.rs"
+description = "Core solver library for tsp-mt"
+license = "Apache-2.0"
+readme = "../../README.md"
+keywords = ["tsp", "routing", "geo", "lkh", "h3"]
+categories = ["algorithms"]
 
 [dependencies]
 rand = "0.9.2"

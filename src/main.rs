@@ -1,3 +1,5 @@
+use std::env;
+
 use log::info;
 
 use tsp_mt_core::{
@@ -5,6 +7,14 @@ use tsp_mt_core::{
 };
 
 fn main() -> Result<()> {
+    if env::args()
+        .skip(1)
+        .any(|arg| arg == "--help" || arg == "-h")
+    {
+        println!("{}", SolverOptions::usage());
+        return Ok(());
+    }
+
     let options = SolverOptions::from_args()?;
     logging::init_logger(&options)?;
 

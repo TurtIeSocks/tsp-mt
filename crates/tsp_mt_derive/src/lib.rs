@@ -18,7 +18,7 @@ pub fn timer(attr: TokenStream, item: TokenStream) -> TokenStream {
     let fn_attrs = &input_fn.attrs;
 
     let message_str = message
-        .and_then(|f| Some(f.value()))
+        .map(|f| f.value())
         .unwrap_or(fn_sig.ident.to_string());
 
     // Generate the new function with timing code

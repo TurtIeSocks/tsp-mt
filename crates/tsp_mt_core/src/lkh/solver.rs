@@ -34,16 +34,16 @@ const ERR_NO_RESULTS: &str = "No results";
 const ERR_INVALID_POINT: &str = "Input contains invalid lat/lng values";
 const ERR_INVALID_PROJECTION_RADIUS: &str = "projection_radius must be > 0";
 
-pub(crate) struct LkhSolver<'a> {
-    executable: &'a PathBuf,
-    work_dir: &'a PathBuf,
+pub(crate) struct LkhSolver{
+    executable: PathBuf,
+    work_dir:PathBuf,
     problem_file: PathBuf,
     candidate_file: PathBuf,
     pi_file: PathBuf,
 }
 
-impl<'a> LkhSolver<'a> {
-    pub(crate) fn new(executable: &'a PathBuf, work_dir: &'a PathBuf) -> Self {
+impl LkhSolver {
+    pub(crate) fn new(executable: &Path, work_dir: &Path) -> Self {
         let problem_file = work_dir.join(PROBLEM_FILE.tsp());
         let candidate_file = work_dir.join(PROBLEM_FILE.candidate());
         let pi_file = work_dir.join(PROBLEM_FILE.pi());
@@ -51,8 +51,8 @@ impl<'a> LkhSolver<'a> {
         // utils::register_workdir_for_shutdown_cleanup(work_dir);
 
         Self {
-            executable,
-            work_dir,
+            executable: executable.to_path_buf(),
+            work_dir: work_dir.to_path_buf(),
             problem_file,
             candidate_file,
             pi_file,
@@ -67,12 +67,12 @@ impl<'a> LkhSolver<'a> {
             - THREAD_RESERVED_CORES
     }
 
-    pub(crate) fn work_dir(&self) -> &Path {
-        self.work_dir
+    pub(crate) fn work_dir(&self) -> &PathBuf {
+        &self.work_dir
     }
 
     pub(crate) fn create_work_dir(&self) -> Result<()> {
-        fs::create_dir_all(self.work_dir)?;
+        fs::create_dir_all(&self.work_dir)?;
         Ok(())
     }
 
@@ -117,9 +117,9 @@ PI_FILE = {}
     }
 
     pub(crate) fn run(&self, par_path: &Path) -> Result<Output> {
-        Command::new(self.executable)
+        Command::new(&self.executable)
             .arg(par_path)
-            .current_dir(self.work_dir)
+            .current_dir(&self.work_dir)
             .output()
             .map_err(Error::from)
     }

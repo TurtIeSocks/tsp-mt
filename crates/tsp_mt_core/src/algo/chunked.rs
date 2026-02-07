@@ -45,15 +45,15 @@ impl Drop for ChunkSolver {
 }
 
 impl ChunkSolver {
-    fn new(work_dir: &PathBuf) -> Self {
+    fn new(work_dir: &Path) -> Self {
         utils::register_workdir_for_shutdown_cleanup(work_dir);
-        Self(work_dir.clone())
+        Self(work_dir.to_path_buf())
     }
 
     fn solve_single(
         &self,
-        lkh_exe: &PathBuf,
-        work_dir: &PathBuf,
+        lkh_exe: &Path,
+        work_dir: &Path,
         chunk_points: &[LKHNode],
         options: &SolverOptions,
     ) -> Result<Vec<usize>> {

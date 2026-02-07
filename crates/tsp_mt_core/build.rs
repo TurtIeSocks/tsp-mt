@@ -114,10 +114,10 @@ fn copy_if_different(src: &Path, dst: &Path) -> io::Result<()> {
 }
 
 fn write_if_different(path: &Path, data: &[u8]) -> io::Result<()> {
-    if let Ok(existing) = fs::read(path) {
-        if existing == data {
-            return Ok(());
-        }
+    if let Ok(existing) = fs::read(path)
+        && existing == data
+    {
+        return Ok(());
     }
     fs::write(path, data)
 }

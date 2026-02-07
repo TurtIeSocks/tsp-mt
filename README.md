@@ -12,7 +12,7 @@ High-performance TSP solver for geographic coordinates (`lat,lng`) using LKH, pa
 ## Prerequisites
 
 - Rust toolchain with 2024 edition support (Rust 1.85+ recommended)
-- Windows users: download `LKH.exe` from `http://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe` and place it in the repository root (`./LKH.exe`) before building.
+- Windows users: download `LKH.exe` from `https://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe` and place it in the repository root (`./LKH.exe`) before building.
 - Linux/macOS users: system tools:
   - `make`
   - `tar`
@@ -57,7 +57,7 @@ Copy-Item target\release\tsp-mt.exe C:\absolute\path\to\output\my-tsp-mt.exe
 During build, `build.rs`:
 
 1. On Linux/macOS:
-   - Downloads `LKH-3.0.13.tgz` (default URL: `http://akira.ruc.dk/~keld/research/LKH-3/LKH-3.0.13.tgz`)
+   - Downloads `LKH-3.0.13.tgz` (default URL: `https://akira.ruc.dk/~keld/research/LKH-3/LKH-3.0.13.tgz`)
    - Builds `LKH` with `make`
    - Embeds the resulting executable bytes into this binary
 2. On Windows:
@@ -122,7 +122,7 @@ Both `--flag value` and `--flag=value` work.
 | Argument                              | Type               |          Default | Notes                                                                             |
 | ------------------------------------- | ------------------ | ---------------: | --------------------------------------------------------------------------------- |
 | `--lkh-exe <path>`                    | path               |           `auto` | Use this LKH executable instead of extracted embedded one                         |
-| `--work-dir <path>`                   | path               |       `<cwd>/.temp` | Temp/output workspace for run artifacts                                           |
+| `--work-dir <path>`                   | path               | `<os-temp>/tsp-mt-<pid>` | Temp/output workspace for run artifacts                                       |
 | `--projection-radius <f64>`           | float              |           `70.0` | Must be `> 0`                                                                     |
 | `--max-chunk-size <usize>`            | int                |           `5000` | Must be `> 0`; above this input size, H3 chunked solver is used                  |
 | `--centroid-order-seed <u64>`         | int                |            `999` | Seed for chunk-centroid ordering run                                              |
