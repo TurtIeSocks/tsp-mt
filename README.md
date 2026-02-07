@@ -23,7 +23,7 @@ High-performance TSP solver for geographic coordinates (`lat,lng`) using LKH, pa
 1. Clone the repo:
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/TurtIeSocks/tsp-mt.git
 cd tsp-mt
 ```
 
