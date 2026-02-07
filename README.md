@@ -33,6 +33,25 @@ cd tsp-mt
 cargo build --release
 ```
 
+### Build Binary To A Specific File
+
+Build, then copy the final binary to the exact output path you want:
+
+```bash
+cargo build --release
+cp target/release/tsp-mt /absolute/path/to/output/my-tsp-mt
+
+# to use as a plugin with koji
+# cp target/release/tsp-mt ~/{your_koji_directory}/server/algorithms/src/routing/plugins/
+```
+
+Windows PowerShell equivalent:
+
+```powershell
+cargo build --release
+Copy-Item target\release\tsp-mt.exe C:\absolute\path\to\output\my-tsp-mt.exe
+```
+
 ### How LKH Is Provided
 
 During build, `build.rs`:
