@@ -2,9 +2,14 @@ use std::{env, fs, io, path::PathBuf};
 
 include!(concat!(env!("OUT_DIR"), "/embedded_lkh.rs"));
 
+#[cfg(target_os = "windows")]
+const EXECUTABLE_SUFFIX: &str = ".exe";
+#[cfg(not(target_os = "windows"))]
+const EXECUTABLE_SUFFIX: &str = "";
+
 pub(crate) fn ensure_lkh_executable() -> io::Result<PathBuf> {
     let mut path = env::temp_dir();
-    path.push(format!("tsp-mt-lkh-{}", LKH_VERSION));
+    path.push(format!("tsp-mt-lkh-{}{}", LKH_VERSION, EXECUTABLE_SUFFIX));
 
     let needs_write = match fs::metadata(&path) {
         Ok(meta) => meta.len() != LKH_EXECUTABLE_BYTES.len() as u64,

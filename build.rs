@@ -9,18 +9,46 @@ use std::{
 
 const LKH_VERSION: &str = "3.0.13";
 const LKH_URL: &str = "http://akira.ruc.dk/~keld/research/LKH-3/LKH-3.0.13.tgz";
+const LKH_WINDOWS_EXE: &str = "LKH.exe";
+const LKH_WINDOWS_URL: &str = "http://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe";
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=lkh/lkh.tgz");
+    println!("cargo:rerun-if-changed={LKH_WINDOWS_EXE}");
     println!("cargo:rerun-if-env-changed=TSP_MT_LKH_URL");
-
-    if !cfg!(target_family = "unix") {
-        return Err("LKH build is only supported on unix-like targets".into());
-    }
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
+
+    if cfg!(target_os = "windows") {
+        return build_windows(&manifest_dir, &out_dir);
+    }
+    if !cfg!(target_family = "unix") {
+        return Err("LKH build is only supported on unix-like targets and Windows".into());
+    }
+
+    build_unix(&manifest_dir, &out_dir)
+}
+
+fn build_windows(manifest_dir: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>> {
+    let root_exe = manifest_dir.join(LKH_WINDOWS_EXE);
+    if !root_exe.exists() {
+        return Err(format!(
+            "windows build requires {LKH_WINDOWS_EXE} in repository root ({}). \
+             download it from {LKH_WINDOWS_URL}",
+            root_exe.display(),
+        )
+        .into());
+    }
+
+    let bundled_bin = out_dir.join("lkh.bin");
+    fs::copy(&root_exe, &bundled_bin)?;
+    write_embedded_source(out_dir, &bundled_bin)?;
+    Ok(())
+}
+
+fn build_unix(manifest_dir: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>> {
     let build_root = out_dir.join("lkh-build");
     fs::create_dir_all(&build_root)?;
 
@@ -52,7 +80,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let bundled_bin = out_dir.join("lkh.bin");
     fs::copy(&built_exe, &bundled_bin)?;
+    write_embedded_source(out_dir, &bundled_bin)?;
 
+    Ok(())
+}
+
+fn write_embedded_source(out_dir: &Path, bundled_bin: &Path) -> Result<(), Box<dyn Error>> {
     let generated = out_dir.join("embedded_lkh.rs");
     let source = format!(
         "pub const LKH_VERSION: &str = \"{LKH_VERSION}\";\n\
@@ -60,7 +93,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         bundled_bin.display()
     );
     fs::write(generated, source)?;
-
     Ok(())
 }
 
