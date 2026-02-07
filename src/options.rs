@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, io};
 
 /// Runtime options for LKH solving behavior.
 #[derive(Clone, Debug)]
@@ -37,21 +37,30 @@ impl Default for SolverOptions {
 }
 
 impl SolverOptions {
-    pub fn from_args() -> Result<Self, String> {
+    pub fn from_args() -> io::Result<Self> {
         let mut options = Self::default();
         let mut args = env::args().skip(1).peekable();
 
         while let Some(arg) = args.next() {
             if arg == "--help" || arg == "-h" {
-                return Err(Self::usage().to_string());
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    Self::usage().to_string(),
+                ));
             }
 
             let Some(raw_name) = arg.strip_prefix("--") else {
-                return Err(format!("Unexpected argument: {arg}\n\n{}", Self::usage()));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Unexpected argument: {arg}\n\n{}", Self::usage()),
+                ));
             };
 
             if raw_name.is_empty() {
-                return Err(format!("Invalid option name: {arg}\n\n{}", Self::usage()));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Invalid option name: {arg}\n\n{}", Self::usage()),
+                ));
             }
 
             let (name, value) = split_arg(raw_name, &mut args);
@@ -86,18 +95,27 @@ impl SolverOptions {
                 }
                 "no-verbose" => {
                     if value.is_some() {
-                        return Err(format!("Flag --{name} does not take a value"));
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("Flag --{name} does not take a value"),
+                        ));
                     }
                     options.verbose = false;
                 }
                 // Handled by SolverInput::from_args; accepted here to allow dual parsing.
                 "lkh-exe" | "work-dir" => {
                     if value.is_none() {
-                        return Err(format!("Missing value for --{name}"));
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("Missing value for --{name}"),
+                        ));
                     }
                 }
                 _ => {
-                    return Err(format!("Unknown option: --{name}\n\n{}", Self::usage()));
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("Unknown option: --{name}\n\n{}", Self::usage()),
+                    ));
                 }
             }
         }
@@ -130,22 +148,32 @@ impl SolverOptions {
     }
 }
 
-fn parse_value<T>(name: &str, value: Option<String>) -> Result<T, String>
+fn parse_value<T>(name: &str, value: Option<String>) -> io::Result<T>
 where
     T: std::str::FromStr,
     T::Err: std::fmt::Display,
 {
-    let raw = value.ok_or_else(|| format!("Missing value for --{name}"))?;
-    raw.parse::<T>()
-        .map_err(|e| format!("Invalid value for --{name}: {raw} ({e})"))
+    let raw = value.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Missing value for --{name}"),
+        )
+    })?;
+    raw.parse::<T>().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Invalid value for --{name}: {raw} ({e})"),
+        )
+    })
 }
 
-fn parse_bool(name: &str, value: &str) -> Result<bool, String> {
+fn parse_bool(name: &str, value: &str) -> io::Result<bool> {
     match value {
         "1" | "true" | "TRUE" | "True" | "yes" | "YES" | "on" | "ON" => Ok(true),
         "0" | "false" | "FALSE" | "False" | "no" | "NO" | "off" | "OFF" => Ok(false),
-        _ => Err(format!(
-            "Invalid boolean for --{name}: {value} (expected true/false)"
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Invalid boolean for --{name}: {value} (expected true/false)"),
         )),
     }
 }

@@ -4,18 +4,8 @@ use tsp_mt::{SolverInput, SolverOptions, solve_tsp_with_lkh_h3_chunked, utils};
 
 fn main() -> std::io::Result<()> {
     let now = Instant::now();
-    let input = SolverInput::from_args().map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("input parsing error:\n{e}"),
-        )
-    })?;
-    let options = SolverOptions::from_args().map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("argument parsing error:\n{e}"),
-        )
-    })?;
+    let input = SolverInput::from_args()?;
+    let options = SolverOptions::from_args()?;
 
     eprintln!("Input length: {}", input.points_len());
     eprintln!();
