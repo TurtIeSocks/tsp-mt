@@ -1,5 +1,6 @@
 use std::{
     env,
+    fmt,
     io::Read,
     path::{Path, PathBuf},
 };
@@ -91,6 +92,18 @@ impl SolverInput {
 
     pub(crate) fn get_point(&self, idx: usize) -> LKHNode {
         self.points[idx]
+    }
+}
+
+impl fmt::Display for SolverInput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "lkh_exe={} work_dir={} points={}",
+            self.lkh_exe.display(),
+            self.work_dir.display(),
+            self.points.len()
+        )
     }
 }
 

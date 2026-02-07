@@ -61,7 +61,7 @@ impl ChunkSolver {
             .project();
 
         solver.create_problem_file(&pts)?;
-        solver.ensure_candidate_file(pts.len())?;
+        // solver.ensure_candidate_file(pts.len())?;
 
         let rs = RunSpec::new(
             RUN_INDEX_SINGLE,

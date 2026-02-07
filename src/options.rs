@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, fmt};
 
 use log::LevelFilter;
 
@@ -66,6 +66,20 @@ impl LogLevel {
     }
 }
 
+impl fmt::Display for LogLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let value = match self {
+            Self::Error => "error",
+            Self::Warn => "warn",
+            Self::Info => "info",
+            Self::Debug => "debug",
+            Self::Trace => "trace",
+            Self::Off => "off",
+        };
+        write!(f, "{value}")
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LogFormat {
     Compact,
@@ -81,6 +95,16 @@ impl LogFormat {
                 "Invalid value for --log-format: {raw} (expected compact|pretty)"
             ))),
         }
+    }
+}
+
+impl fmt::Display for LogFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let value = match self {
+            Self::Compact => "compact",
+            Self::Pretty => "pretty",
+        };
+        write!(f, "{value}")
     }
 }
 
@@ -221,6 +245,25 @@ impl SolverOptions {
             "  tsp-mt --max-chunk-size 2000 --quiet < points.txt\n",
             "  tsp-mt --log-level=debug --log-format=pretty --log-timestamp < points.txt\n",
             "  tsp-mt --projection-radius=100 --log-target=stderr < points.txt\n",
+        )
+    }
+}
+
+impl fmt::Display for SolverOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "projection_radius={} max_chunk_size={} centroid_order_seed={} centroid_order_max_trials={} centroid_order_time_limit={} boundary_2opt_window={} boundary_2opt_passes={} log_level={} log_format={} log_timestamp={}",
+            self.projection_radius,
+            self.max_chunk_size,
+            self.centroid_order_seed,
+            self.centroid_order_max_trials,
+            self.centroid_order_time_limit,
+            self.boundary_2opt_window,
+            self.boundary_2opt_passes,
+            self.log_level,
+            self.log_format,
+            self.log_timestamp
         )
     }
 }

@@ -10,13 +10,8 @@ fn main() -> Result<()> {
     logging::init_logger(&options)?;
     let input = SolverInput::from_args()?;
 
-    info!("Input length: {}", input.points_len());
-
-    info!(
-        "Workdir: {:?} | LKH: {:?}",
-        input.work_dir_path(),
-        input.lkh_path()
-    );
+    info!("input: {input}");
+    info!("options: {options}");
 
     let route = solve_tsp_with_lkh_h3_chunked(input, options)?;
 
@@ -24,10 +19,13 @@ fn main() -> Result<()> {
         println!("{point}");
     }
 
-    info!("Output length: {}", route.len());
-    info!("Time: {:.2}s", now.elapsed().as_secs_f32());
+    info!(
+        "output: n={} time={:.2}s",
+        route.len(),
+        now.elapsed().as_secs_f32()
+    );
 
-    utils::measure_distance_open(&route);
+    utils::tour_distance(&route);
 
     Ok(())
 }

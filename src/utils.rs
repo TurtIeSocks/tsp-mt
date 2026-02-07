@@ -1,9 +1,9 @@
 use crate::LKHNode;
 
-pub fn measure_distance_open(points: &[LKHNode]) -> (f64, f64, i32) {
+pub fn tour_distance(points: &[LKHNode]) -> (f64, f64, i32) {
     if points.len() < 2 {
         log::info!(
-            "metrics.open_distance: n={} total_m=0 longest_m=0 avg_m=0 spike_threshold_m=0 spikes=0",
+            "metrics: n={} total_m=0 longest_m=0 avg_m=0 spike_threshold_m=0 spikes=0",
             points.len()
         );
         return (0.0, 0.0, 0);
@@ -38,7 +38,7 @@ pub fn measure_distance_open(points: &[LKHNode]) -> (f64, f64, i32) {
     }
 
     log::info!(
-        "metrics.open_distance: n={} total_m={total:.0} longest_m={longest:.0} avg_m={avg_edge:.0} spike_threshold_m={threshold:.0} spikes={spikes}",
+        "metrics: n={} total_m={total:.0} longest_m={longest:.0} avg_m={avg_edge:.0} spike_threshold_m={threshold:.0} spikes={spikes}",
         points.len()
     );
 
