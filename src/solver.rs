@@ -158,10 +158,10 @@ pub fn solve_tsp_with_lkh_parallel(
     }
 
     let cfg = LkhConfig::new(input.n());
-    let solver = LkhSolver::new(input.lkh_exe, input.work_dir);
+    let solver = LkhSolver::new(&input.lkh_exe, &input.work_dir);
     solver.create_work_dir()?;
 
-    let points = PlaneProjection::new(input.points)
+    let points = PlaneProjection::new(&input.points)
         .radius(options.projection_radius)
         .project();
 

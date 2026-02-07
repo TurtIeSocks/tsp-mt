@@ -141,11 +141,11 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         return super::solve_tsp_with_lkh_parallel(input, options);
     }
 
-    let global_coords = PlaneProjection::new(input.points)
+    let global_coords = PlaneProjection::new(&input.points)
         .radius(options.projection_radius)
         .project();
 
-    let chunks = H3Chunker::partition_indices(input.points, options.max_chunk_size)?;
+    let chunks = H3Chunker::partition_indices(&input.points, options.max_chunk_size)?;
     if options.verbose {
         eprintln!(
             "Chunked {} points into {} chunks (max {})",
@@ -164,7 +164,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
 
             let now = Instant::now();
             let tour_local =
-                ChunkSolver::solve_single(input.lkh_exe, &chunk_dir, &chunk_points, &options)?;
+                ChunkSolver::solve_single(&input.lkh_exe, &chunk_dir, &chunk_points, &options)?;
             let tour_global: Vec<usize> = tour_local.into_iter().map(|li| idxs[li]).collect();
 
             if options.verbose {
@@ -186,7 +186,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
 
     let order_dir = input.work_dir.join(CHUNK_ORDER_DIR);
     let order =
-        ChunkSolver::order_by_centroid_tsp(input.lkh_exe, &order_dir, &centroids, &options)?;
+        ChunkSolver::order_by_centroid_tsp(&input.lkh_exe, &order_dir, &centroids, &options)?;
 
     let mut ordered_tours: Vec<Vec<usize>> = Vec::with_capacity(solved_chunk_tours.len());
     for ci in order {
