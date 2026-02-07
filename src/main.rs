@@ -45,7 +45,7 @@ fn main() -> std::io::Result<()> {
     }
 
     eprintln!("Output length: {}", route.len());
-    eprintln!("Time: {:.2}", now.elapsed().as_secs_f32());
+    eprintln!("Time: {:.2}s", now.elapsed().as_secs_f32());
 
     utils::measure_distance_open(&route);
     // run_single(&path, &points);

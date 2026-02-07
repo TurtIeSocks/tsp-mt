@@ -71,7 +71,7 @@ impl Plane {
         self.radial_project(dir)
     }
 
-    pub fn new(input: &Vec<Point>) -> Plane {
+    pub fn new(input: &[Point]) -> Plane {
         let mut plane = Plane {
             points: input
                 .iter()
@@ -127,41 +127,5 @@ impl Plane {
                 }
             })
             .collect()
-    }
-
-    pub fn reverse(&self, input: Vec<Point>) -> Vec<Point> {
-        let mut min = 1. / 0.;
-        let mut sum = 0.;
-        let mut ouput = vec![];
-        for p in input.iter() {
-            let x = self.center.0 + (self.x.0 * p.lat + self.y.0 * p.lng) * self.adjusted_radius;
-            let y = self.center.1 + (self.x.1 * p.lat + self.y.1 * p.lng) * self.adjusted_radius;
-            let z = self.center.2 + (self.x.2 * p.lat + self.y.2 * p.lng) * self.adjusted_radius;
-            let (lat, lon) = self.radial_project((x, y, z));
-            let s = self.dot_product((x, y, z), self.z) / self.euclidean_norm2((x, y, z)).sqrt();
-
-            ouput.push(Point {
-                lat: lat.to_degrees(),
-                lng: lon.to_degrees(),
-            });
-            if s < min {
-                min = s;
-            }
-            sum += s;
-        }
-        eprintln!(
-            "Worst scaling: {} (larger/closer to 1 = better; larger area to cover is worse)",
-            min
-        );
-        eprintln!("Average scaling: {}", sum / input.len() as Precision);
-        eprintln!("Disc scaling: {}", self.adjusted_radius / self.radius);
-
-        // ouput.sort_by(|a, b| {
-        //     geohash::encode(Coord { x: a.lng, y: a.lat }, 9)
-        //         .unwrap()
-        //         .cmp(&geohash::encode(Coord { x: b.lng, y: b.lat }, 9).unwrap())
-        // });
-
-        ouput
     }
 }

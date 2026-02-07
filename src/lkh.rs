@@ -17,13 +17,13 @@ use crate::{project::Plane, utils::Point};
 
 #[derive(Clone, Debug)]
 pub struct LkhConfig {
-    /// Trials per process. For n=5000, 10k–20k is a good start.
+    /// Trials per process.
     max_trials: usize,
-    /// LKH RUNS per process. Keep at 1 when parallelizing externally.
+    /// LKH RUNS per process.
     runs: usize,
     /// Base seed used to generate per-run seeds.
     base_seed: u64,
-    /// LKH TRACE_LEVEL (0..=3ish; 1 is nice).
+    /// LKH TRACE_LEVEL.
     trace_level: usize,
     /// Seconds to run LKH
     time_limit: usize,
@@ -46,8 +46,6 @@ impl LkhConfig {
             - 1
     }
 
-    /// Deterministic seed generation; replace with your favorite scheme.
-    /// Produces `count` distinct u64 seeds from `base_seed`.
     fn generate_seeds(&self, count: usize) -> Vec<u64> {
         let mut rng = StdRng::seed_from_u64(self.base_seed);
         (0..count).map(|_| rng.random::<u64>()).collect()
@@ -93,7 +91,6 @@ impl<'a> LKHSolver<'a> {
         fs::create_dir_all(self.work_dir)
     }
 
-    /// Write TSPLIB EUC_2D problem using projected XY.
     fn create_problem_file(&self, points: &[Coord]) -> io::Result<()> {
         let mut s = String::new();
         s.push_str("NAME: problem\n");
@@ -102,7 +99,6 @@ impl<'a> LKHSolver<'a> {
         s.push_str("EDGE_WEIGHT_TYPE: EUC_2D\n");
         s.push_str("NODE_COORD_SECTION\n");
         for (i, p) in points.iter().enumerate() {
-            // TSPLIB is 1-based
             s.push_str(&format!(
                 "{} {:.0} {:.0}\n",
                 i + 1,
@@ -181,8 +177,6 @@ impl<'a> Drop for LKHSolver<'a> {
     }
 }
 
-/// Solve TSP by spawning multiple LKH processes in parallel with different SEEDs.
-/// Returns best tour points.
 pub fn solve_tsp_with_lkh_parallel(
     lkh_exe: &Path,
     work_dir: &Path,
@@ -318,9 +312,7 @@ MAX_CANDIDATES = 32 SYMMETRIC
 
         fs::write(&self.par_path, s)
     }
-    // SUBGRADIENT = NO
 
-    /// Small-problem par writer for centroid ordering.
     fn write_lkh_par_small(
         &self,
         problem_path: &Path,
@@ -346,9 +338,6 @@ MAX_CANDIDATES = 32 SYMMETRIC
         );
         fs::write(&self.par_path, s)
     }
-
-    //     PI_FILE = 0
-    // SUBGRADIENT = NO
 
     fn parse_tsplib_tour(&self, n: usize) -> io::Result<Vec<usize>> {
         let text = fs::read_to_string(&self.tour_path)?;
@@ -539,187 +528,158 @@ fn rotate_cycle(tour: &[usize], start_node: usize) -> Vec<usize> {
     out
 }
 
-fn successor_map_cycle(tour: &[usize]) -> HashMap<usize, usize> {
-    let mut next = HashMap::with_capacity(tour.len());
-    for w in tour.windows(2) {
-        next.insert(w[0], w[1]);
-    }
-    next.insert(*tour.last().unwrap(), tour[0]);
-    next
-}
-
 struct MergeResult {
     merged: Vec<usize>,
     /// Each index i refers to boundary edge (i -> i+1).
     boundaries: [usize; 2],
 }
 
-fn merge_two_cycles_portal_exact(
-    coords: &[Coord],
-    tour_a: &[usize],
-    tour_b: &[usize],
-    portal_limit: usize,
-) -> MergeResult {
-    // How many nearest nodes in B to consider per portal candidate.
-    const K_NEAREST_B: usize = 64;
+/// Merges two tours by finding the strictly closest points between them.
+/// This prevents "random" portals from creating large outlier jumps.
+fn merge_two_cycles_dense(coords: &[Coord], tour_a: &[usize], tour_b: &[usize]) -> MergeResult {
+    // If bridge edges are longer than this, we penalize them extra.
+    // This discourages merging chunks that are physically very far apart
+    // if a slightly better local configuration exists.
+    const LARGE_JUMP_PENALTY: f64 = 500.0;
 
-    // Used only for the "closest-to-B" portal half.
-    const PORTAL_SAMPLE: usize = 4096;
-
-    // Penalty factor: prioritize avoiding huge bridge edges.
-    // Larger => aggressively avoids monster edges (start with 50–200).
-    const MAX_EDGE_PENALTY: f64 = 100.0;
-
-    let next_a = successor_map_cycle(tour_a);
-    let next_b = successor_map_cycle(tour_b);
-
-    // Build prev maps so we can consider both incident edges for cuts.
-    let mut prev_a: HashMap<usize, usize> = HashMap::with_capacity(tour_a.len());
-    for &u in tour_a {
-        let v = *next_a.get(&u).unwrap();
-        prev_a.insert(v, u);
-    }
-    let mut prev_b: HashMap<usize, usize> = HashMap::with_capacity(tour_b.len());
-    for &u in tour_b {
-        let v = *next_b.get(&u).unwrap();
-        prev_b.insert(v, u);
-    }
-
-    // KD-tree over B nodes (payload = node id)
+    // 1. Build a KdTree for Tour B for fast querying.
     let mut tree: KdTree<f64, 2> = KdTree::new();
     for &node in tour_b {
         let c = coords[node];
         tree.add(&[c.x, c.y], node as u64);
     }
 
-    // ---- Portal selection: MIXED ----
-    // Half evenly spaced portals (coverage)
-    let half = (portal_limit / 2).max(1);
+    // 2. Dense search: Find the closest pair (u \in A, v \in B)
+    // We scan EVERY point in A.
+    let mut candidates: Vec<(f64, usize, usize)> = Vec::with_capacity(tour_a.len());
 
-    let step_even = (tour_a.len() / half).max(1);
-    let mut portals: Vec<usize> = tour_a
-        .iter()
-        .step_by(step_even)
-        .take(half)
-        .copied()
-        .collect();
-
-    // Half "closest-ish to B" portals, but only as an additive set (not full replacement)
-    let sample = PORTAL_SAMPLE.min(tour_a.len()).max(1);
-    let step = (tour_a.len() / sample).max(1);
-
-    let mut scored: Vec<(f64, usize)> = tour_a
-        .iter()
-        .step_by(step)
-        .take(sample)
-        .map(|&a| {
-            let ca = coords[a];
-            let nn = tree.nearest_one::<SquaredEuclidean>(&[ca.x, ca.y]);
-            (nn.distance, a) // squared distance
-        })
-        .collect();
-
-    scored.sort_by(|x, y| x.0.partial_cmp(&y.0).unwrap());
-    for (_, a) in scored.into_iter().take(portal_limit - portals.len()) {
-        portals.push(a);
+    for &u in tour_a {
+        let c = coords[u];
+        // We only need the single nearest neighbor in B to find the tightest link.
+        let nn = tree.nearest_one::<SquaredEuclidean>(&[c.x, c.y]);
+        candidates.push((nn.distance, u, nn.item as usize));
     }
 
-    // De-dupe portals
-    portals.sort_unstable();
-    portals.dedup();
+    // Sort by distance ascending: tightest kiss first.
+    candidates.sort_unstable_by(|x, y| x.0.partial_cmp(&y.0).unwrap());
 
-    // best tuple:
-    // (a_cut_u, a_cut_v, b_cut_u, b_cut_v, flip_b, score)
-    // each cut edge is (cut_u -> cut_v) in FORWARD direction of that tour.
+    // 3. Evaluate the best way to cut and splice based on the top K closest pairs.
+    // We check top 40 pairs to allow for local orientation flexibility.
+    let check_limit = 40.min(candidates.len());
+
+    // Map node ID -> Index in slice for fast lookups
+    let pos_a: HashMap<usize, usize> = tour_a.iter().enumerate().map(|(i, &n)| (n, i)).collect();
+    let pos_b: HashMap<usize, usize> = tour_b.iter().enumerate().map(|(i, &n)| (n, i)).collect();
+
+    let n_a = tour_a.len();
+    let n_b = tour_b.len();
+
     let mut best: Option<(usize, usize, usize, usize, bool, f64)> = None;
 
-    for &a in &portals {
-        let a_next = *next_a.get(&a).unwrap();
-        let a_prev = *prev_a.get(&a).unwrap();
+    for &(_, u_node, v_node) in candidates.iter().take(check_limit) {
+        let u_idx = *pos_a.get(&u_node).unwrap();
+        let v_idx = *pos_b.get(&v_node).unwrap();
 
-        // Consider cutting either incident edge around a:
-        // (a -> a_next) OR (a_prev -> a)
-        for (a_cut_u, a_cut_v) in [(a, a_next), (a_prev, a)] {
-            let ca = coords[a_cut_u]; // query point can be either; a is fine too
-            let knn =
-                tree.nearest_n::<SquaredEuclidean>(&[ca.x, ca.y], K_NEAREST_B.min(tour_b.len()));
+        // Neighbors in A
+        let u_next_node = tour_a[(u_idx + 1) % n_a];
+        let u_prev_node = tour_a[(u_idx + n_a - 1) % n_a];
 
-            for hit in knn {
-                let b = hit.item as usize;
-                let b_next = *next_b.get(&b).unwrap();
-                let b_prev = *prev_b.get(&b).unwrap();
+        // Neighbors in B
+        let v_next_node = tour_b[(v_idx + 1) % n_b];
+        let v_prev_node = tour_b[(v_idx + n_b - 1) % n_b];
 
-                // Consider cutting either incident edge around b:
-                for (b_cut_u, b_cut_v) in [(b, b_next), (b_prev, b)] {
-                    let removed = dist(coords[a_cut_u], coords[a_cut_v])
-                        + dist(coords[b_cut_u], coords[b_cut_v]);
+        // We can cut either edge incident to u (in A) and either edge incident to v (in B).
+        // A-cuts: (u->u_next) OR (u_prev->u)
+        // B-cuts: (v->v_next) OR (v_prev->v)
 
-                    // Two orientations (same idea as before):
-                    // forward: connect a_cut_u -> b_cut_v, b_cut_u -> a_cut_v
-                    let e1 = dist(coords[a_cut_u], coords[b_cut_v]);
-                    let e2 = dist(coords[b_cut_u], coords[a_cut_v]);
-                    let score_forward = (removed + e1 + e2) + MAX_EDGE_PENALTY * e1.max(e2);
+        let a_cuts = [(u_node, u_next_node), (u_prev_node, u_node)];
+        let b_cuts = [(v_node, v_next_node), (v_prev_node, v_node)];
 
-                    // reverse: connect a_cut_u -> b_cut_u, b_cut_v -> a_cut_v
-                    let r1 = dist(coords[a_cut_u], coords[b_cut_u]);
-                    let r2 = dist(coords[b_cut_v], coords[a_cut_v]);
-                    let score_reverse = (removed + r1 + r2) + MAX_EDGE_PENALTY * r1.max(r2);
+        for (a1, a2) in a_cuts {
+            for (b1, b2) in b_cuts {
+                // Cost of removing existing edges
+                let removed_cost = dist(coords[a1], coords[a2]) + dist(coords[b1], coords[b2]);
 
-                    if best.map(|x| score_forward < x.5).unwrap_or(true) {
-                        best = Some((a_cut_u, a_cut_v, b_cut_u, b_cut_v, false, score_forward));
-                    }
-                    if best.map(|x| score_reverse < x.5).unwrap_or(true) {
-                        best = Some((a_cut_u, a_cut_v, b_cut_u, b_cut_v, true, score_reverse));
-                    }
+                // Option 1: Forward splice (a1->b2, b1->a2)
+                // Bridge edges:
+                let e1 = dist(coords[a1], coords[b2]);
+                let e2 = dist(coords[b1], coords[a2]);
+
+                // Add penalty for large jumps to discourage "reaching" across gaps
+                let penalty_fwd = if e1 > 1000.0 || e2 > 1000.0 {
+                    LARGE_JUMP_PENALTY
+                } else {
+                    0.0
+                };
+
+                let score_fwd = (e1 + e2 + penalty_fwd) - removed_cost;
+
+                // Option 2: Reverse splice (a1->b1, b2->a2) (implicitly flips B)
+                let r1 = dist(coords[a1], coords[b1]);
+                let r2 = dist(coords[b2], coords[a2]);
+
+                let penalty_rev = if r1 > 1000.0 || r2 > 1000.0 {
+                    LARGE_JUMP_PENALTY
+                } else {
+                    0.0
+                };
+
+                let score_rev = (r1 + r2 + penalty_rev) - removed_cost;
+
+                if best.map_or(true, |x| score_fwd < x.5) {
+                    best = Some((a1, a2, b1, b2, false, score_fwd));
+                }
+                if best.map_or(true, |x| score_rev < x.5) {
+                    best = Some((a1, a2, b1, b2, true, score_rev));
                 }
             }
         }
     }
 
-    let (a_cut_u, a_cut_v, b_cut_u, b_cut_v, flip_b, _score) =
-        best.expect("tours must be non-empty");
+    let (_a_cut_u, a_cut_v, b_cut_u, b_cut_v, flip_b, _score) =
+        best.expect("tours must be non-empty and candidates found");
 
-    // Build A linear piece: start at a_cut_v so that it ends at a_cut_u
+    // Construct the merged tour
+    // A linear piece: start at a_cut_v (so it ends at a_cut_u)
     let a_lin = rotate_cycle(tour_a, a_cut_v);
 
-    // Build B linear piece depending on orientation and cut edge:
-    // If forward: B starts at b_cut_v and ends at b_cut_u
-    // If reverse: reverse tour and start at b_cut_u (ends at b_cut_v)
+    // B linear piece
     let b_lin = if !flip_b {
+        // Forward: connect a_cut_u -> b_cut_v ... -> b_cut_u -> a_cut_v
         rotate_cycle(tour_b, b_cut_v)
     } else {
+        // Reverse: connect a_cut_u -> b_cut_u ... -> b_cut_v -> a_cut_v
+        // To do this, we reverse B and start at b_cut_u
         let mut rev = tour_b.to_vec();
         rev.reverse();
         rotate_cycle(&rev, b_cut_u)
     };
 
-    let a_len = a_lin.len();
-    let b_len = b_lin.len();
-
-    let mut merged = Vec::with_capacity(a_len + b_len);
+    let mut merged = Vec::with_capacity(a_lin.len() + b_lin.len());
     merged.extend_from_slice(&a_lin);
     merged.extend_from_slice(&b_lin);
 
-    // Exact boundary indices:
-    let boundary1 = a_len - 1;
-    let boundary2 = a_len + b_len - 1;
+    // Indices in 'merged' where the new edges exist.
+    // Edge 1: merged[a_len-1] -> merged[a_len]
+    // Edge 2: merged[total-1] -> merged[0]
+    let boundary_mid = a_lin.len() - 1;
+    let boundary_end = merged.len() - 1;
 
     MergeResult {
         merged,
-        boundaries: [boundary1, boundary2],
+        boundaries: [boundary_mid, boundary_end],
     }
 }
 
-fn stitch_chunk_tours_portal_exact(
+fn stitch_chunk_tours_dense(
     coords: &[Coord],
     mut chunk_tours: Vec<Vec<usize>>,
-    portal_limit: usize,
 ) -> (Vec<usize>, Vec<usize>) {
     let mut merged = chunk_tours.remove(0);
     let mut boundaries: Vec<usize> = Vec::new();
 
     for t in chunk_tours {
-        let res = merge_two_cycles_portal_exact(coords, &merged, &t, portal_limit);
+        let res = merge_two_cycles_dense(coords, &merged, &t);
         merged = res.merged;
         boundaries.extend_from_slice(&res.boundaries);
     }
@@ -740,29 +700,48 @@ fn boundary_two_opt(
         return;
     }
 
-    let delta = |t: &[usize], i: usize, k: usize| -> f64 {
-        let a = t[i];
-        let b = t[(i + 1) % n];
-        let c = t[k];
-        let d = t[(k + 1) % n];
-        let before = dist(coords[a], coords[b]) + dist(coords[c], coords[d]);
-        let after = dist(coords[a], coords[c]) + dist(coords[b], coords[d]);
-        after - before
-    };
+    // Optimization: avoid re-allocating
+    // 'window' defines the range around boundary index to check.
 
-    for _ in 0..passes {
+    for _pass in 0..passes {
         let mut improved = false;
-        for &b in boundaries {
-            let start = b.saturating_sub(window);
-            let end = (b + window).min(n - 2);
 
-            for i in start..=end {
-                for k in (i + 2)..=end {
-                    if i == 0 && k == n - 1 {
-                        continue;
-                    }
-                    if delta(tour, i, k) < -1e-9 {
-                        tour[(i + 1)..=k].reverse();
+        for &b_idx in boundaries {
+            // We want to check range [b_idx - window, b_idx + window]
+            // wrapping around n.
+            // Since implementing wrapping 2-opt iterators is complex,
+            // we simply clamp indices for the "linear" scan, which captures
+            // the splice point (which is exactly at b_idx).
+
+            let start = b_idx.saturating_sub(window);
+            let end = (b_idx + window).min(n - 1); // Check up to last element
+
+            for i in start..end {
+                for k in (i + 1)..end {
+                    let j = k + 1; // node after k
+
+                    // Edges are (i, i+1) and (k, k+1/j)
+                    // If we reverse [i+1..=k], we replace:
+                    // (i->i+1) and (k->j)
+                    // with
+                    // (i->k) and (i+1->j)
+
+                    let idx_i = i;
+                    let idx_i1 = i + 1;
+                    let idx_k = k;
+                    let idx_j = if j == n { 0 } else { j }; // Wrap for last edge check
+
+                    let a = tour[idx_i];
+                    let b = tour[idx_i1];
+                    let c = tour[idx_k];
+                    let d = tour[idx_j];
+
+                    let cur_dist = dist(coords[a], coords[b]) + dist(coords[c], coords[d]);
+                    let new_dist = dist(coords[a], coords[c]) + dist(coords[b], coords[d]);
+
+                    if new_dist < cur_dist - 1e-5 {
+                        // Perform reversal
+                        tour[(idx_i + 1)..=idx_k].reverse();
                         improved = true;
                     }
                 }
@@ -773,172 +752,10 @@ fn boundary_two_opt(
         }
     }
 
-    eprintln!("2opt finished in {:.2}s", now.elapsed().as_secs_f32());
-}
-
-fn boundary_three_opt(
-    coords: &[Coord],
-    tour: &mut Vec<usize>,
-    boundaries: &[usize],
-    window: usize,
-    passes: usize,
-) {
-    let n = tour.len();
-    if n < 8 || boundaries.is_empty() {
-        return;
-    }
-
-    #[inline]
-    fn edge_len(coords: &[Coord], t: &[usize], i: usize) -> f64 {
-        let n = t.len();
-        dist(coords[t[i]], coords[t[(i + 1) % n]])
-    }
-
-    // Reverse sub-slice [l..=r] (l <= r) in-place
-    #[inline]
-    fn rev(t: &mut [usize], l: usize, r: usize) {
-        t[l..=r].reverse();
-    }
-
-    // Apply one of a handful of useful 3-opt reconnections for a,b,c edges:
-    // edges are (a,a+1), (b,b+1), (c,c+1) with a < b < c (linear, no wrap)
-    //
-    // We consider 4 practical cases (enough to fix most ugly boundary bridges):
-    //  - 2-opt variants are implicitly included, but we keep those separate in your 2-opt pass
-    //  - 3-opt “double-bridge” like moves (two segment reversals, or one reversal + swap)
-    //
-    // Returns (best_delta, best_case_id)
-    #[inline]
-    fn best_3opt_case(coords: &[Coord], t: &[usize], a: usize, b: usize, c: usize) -> (f64, u8) {
-        let n = t.len();
-        let a1 = (a + 1) % n;
-        let b1 = (b + 1) % n;
-        let c1 = (c + 1) % n;
-
-        let A = t[a];
-        let B = t[a1];
-        let C = t[b];
-        let D = t[b1];
-        let E = t[c];
-        let F = t[c1];
-
-        let before =
-            dist(coords[A], coords[B]) + dist(coords[C], coords[D]) + dist(coords[E], coords[F]);
-
-        // Case 1: reconnect A-C, B-E, D-F  (segments: [B..C] and [D..E] swapped, no reversal)
-        // This is a classic 3-opt "case" that often fixes a bad bridge.
-        let after1 =
-            dist(coords[A], coords[C]) + dist(coords[B], coords[E]) + dist(coords[D], coords[F]);
-
-        // Case 2: reconnect A-C, B-D, E-F  (equivalent to reversing [B..C])
-        let after2 =
-            dist(coords[A], coords[C]) + dist(coords[B], coords[D]) + dist(coords[E], coords[F]);
-
-        // Case 3: reconnect A-B, C-E, D-F  (equivalent to reversing [D..E])
-        let after3 =
-            dist(coords[A], coords[B]) + dist(coords[C], coords[E]) + dist(coords[D], coords[F]);
-
-        // Case 4: reconnect A-D, E-B, C-F  (one reversal + swap; very useful)
-        let after4 =
-            dist(coords[A], coords[D]) + dist(coords[E], coords[B]) + dist(coords[C], coords[F]);
-
-        let mut best = (after1 - before, 1u8);
-        let d2 = after2 - before;
-        if d2 < best.0 {
-            best = (d2, 2);
-        }
-        let d3 = after3 - before;
-        if d3 < best.0 {
-            best = (d3, 3);
-        }
-        let d4 = after4 - before;
-        if d4 < best.0 {
-            best = (d4, 4);
-        }
-
-        best
-    }
-
-    // Actually apply a chosen case. Assumes a < b < c and no wrap-around.
-    fn apply_3opt_case(t: &mut Vec<usize>, a: usize, b: usize, c: usize, case_id: u8) {
-        // Segments:
-        // [0..=a], [a+1..=b], [b+1..=c], [c+1..]
-        let (p, q, r) = (a + 1, b + 1, c + 1);
-
-        match case_id {
-            1 => {
-                // Case 1: A-C, B-E, D-F
-                // reorder middle as: [p..b] + [r..c] ??? easiest: do with temp
-                let mut tmp = Vec::with_capacity(t.len());
-                tmp.extend_from_slice(&t[..=a]);
-                tmp.extend_from_slice(&t[q..=c]); // [b+1..=c]
-                tmp.extend_from_slice(&t[p..=b]); // [a+1..=b]
-                tmp.extend_from_slice(&t[r..]); // [c+1..]
-                *t = tmp;
-            }
-            2 => {
-                // Case 2: A-C, B-D, E-F  => reverse [p..=b]
-                t[p..=b].reverse();
-            }
-            3 => {
-                // Case 3: A-B, C-E, D-F  => reverse [q..=c]
-                t[q..=c].reverse();
-            }
-            4 => {
-                // Case 4: A-D, E-B, C-F
-                // Equivalent to: swap the two middle segments and reverse one of them.
-                // We'll do with temp for clarity:
-                let mut tmp = Vec::with_capacity(t.len());
-                tmp.extend_from_slice(&t[..=a]);
-                // take [q..=c] (segment2) then reverse [p..=b] (segment1 reversed)
-                tmp.extend_from_slice(&t[q..=c]); // segment2
-                let mut seg1: Vec<usize> = t[p..=b].to_vec();
-                seg1.reverse();
-                tmp.extend_from_slice(&seg1);
-                tmp.extend_from_slice(&t[r..]);
-                *t = tmp;
-            }
-            _ => {}
-        }
-    }
-
-    // Main loop
-    for _ in 0..passes {
-        let mut improved_any = false;
-
-        for &b in boundaries {
-            // boundary edge index b means edge (b -> b+1) is a join edge.
-            // We'll search a local window around it, avoiding wrap by working in a linear slice.
-            let start = b.saturating_sub(window);
-            let end = (b + window).min(n - 2); // keep linear, no wrap
-
-            // Choose a,b,c cuts as edge indices within [start..end]
-            // Keep them spaced: a < b < c, with at least 1 node between.
-            let mut best_move: Option<(usize, usize, usize, u8, f64)> = None;
-
-            for a in start..=end.saturating_sub(6) {
-                for b2 in (a + 2)..=end.saturating_sub(4) {
-                    for c in (b2 + 2)..=end.saturating_sub(2) {
-                        let (delta, case_id) = best_3opt_case(coords, tour, a, b2, c);
-                        if delta < -1e-9 {
-                            if best_move.map(|m| delta < m.4).unwrap_or(true) {
-                                best_move = Some((a, b2, c, case_id, delta));
-                            }
-                        }
-                    }
-                }
-            }
-
-            if let Some((a, b2, c, case_id, _delta)) = best_move {
-                apply_3opt_case(tour, a, b2, c, case_id);
-                improved_any = true;
-            }
-        }
-
-        if !improved_any {
-            break;
-        }
-    }
+    eprintln!(
+        "Boundary 2-opt finished in {:.2}s",
+        now.elapsed().as_secs_f32()
+    );
 }
 
 //
@@ -957,7 +774,6 @@ fn solve_chunk_single(
             .enumerate()
             .map(|(idx, _)| idx)
             .collect());
-        // return Err(io::Error::new(io::ErrorKind::InvalidInput, "chunk < 3"));
     }
 
     let cfg = LkhConfig::new(n);
@@ -1056,23 +872,17 @@ fn order_chunks_by_centroid_tsp(
     rs.parse_tsplib_tour(centroids.len())
 }
 
-/// Split into <=10k chunks using H3, solve chunks in parallel, order chunks by centroid TSP,
-/// stitch with portals (exact boundaries), then boundary-only 2-opt.
-///
-/// For <=10k, falls back to your existing multi-seed solver.
 pub fn solve_tsp_with_lkh_h3_chunked(
     lkh_exe: &Path,
     work_dir: &Path,
     input: &[Point],
 ) -> io::Result<Vec<Point>> {
     const MAX_CHUNK: usize = 5_000;
-    const PORTALS: usize = 512;
 
     if input.len() <= MAX_CHUNK {
         return solve_tsp_with_lkh_parallel(lkh_exe, work_dir, input);
     }
 
-    // Global projection for centroid computation + stitching distances
     let global_plane = Plane::new(&input.to_vec()).radius(70.0);
     let global_coords = global_plane.project();
 
@@ -1084,7 +894,6 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         MAX_CHUNK
     );
 
-    // Solve chunks in parallel (1 LKH run per chunk to avoid oversubscription)
     let solved_chunk_tours: Vec<Vec<usize>> = chunks
         .par_iter()
         .enumerate()
@@ -1106,7 +915,6 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         })
         .collect::<io::Result<Vec<_>>>()?;
 
-    // Order chunks via centroid TSP
     let centroids: Vec<Coord> = chunks
         .iter()
         .map(|idxs| centroid_of_indices(&global_coords, idxs))
@@ -1120,13 +928,11 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         ordered_tours.push(solved_chunk_tours[ci].clone());
     }
 
-    // Stitch + exact boundaries
-    let (mut merged, boundaries) =
-        stitch_chunk_tours_portal_exact(&global_coords, ordered_tours, PORTALS);
+    // Use dense stitching instead of sparse portal stitching
+    let (mut merged, boundaries) = stitch_chunk_tours_dense(&global_coords, ordered_tours);
 
-    // Boundary-only polish
-    boundary_two_opt(&global_coords, &mut merged, &boundaries, 400, 4);
-    // boundary_three_opt(&global_coords, &mut merged, &boundaries, 250, 2);
+    // Run robust boundary 2-opt
+    boundary_two_opt(&global_coords, &mut merged, &boundaries, 500, 50);
 
     Ok(merged.into_iter().map(|i| input[i]).collect())
 }
