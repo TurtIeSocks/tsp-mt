@@ -21,6 +21,7 @@ use crate::{
     run_spec::RunSpec,
     solver::LkhSolver,
     stitching::TourStitcher,
+    utils,
 };
 
 const RUN_INDEX_SINGLE: usize = 0;
@@ -34,10 +35,23 @@ const ERR_INVALID_POINT: &str = "Input contains invalid lat/lng values";
 const ERR_INVALID_PROJECTION_RADIUS: &str = "projection_radius must be > 0";
 const ERR_INVALID_MAX_CHUNK_SIZE: &str = "max_chunk_size must be > 0";
 
-struct ChunkSolver;
+struct ChunkSolver(PathBuf);
+
+impl Drop for ChunkSolver {
+    fn drop(&mut self) {
+        log::info!("Dropping chunksolver");
+        utils::cleanup_workdir(&self.0)
+    }
+}
 
 impl ChunkSolver {
+    fn new(work_dir: &PathBuf) -> Self {
+        utils::register_workdir_for_shutdown_cleanup(work_dir);
+        Self(work_dir.clone())
+    }
+
     fn solve_single(
+        &self,
         lkh_exe: &PathBuf,
         work_dir: &PathBuf,
         chunk_points: &[LKHNode],
@@ -78,6 +92,7 @@ impl ChunkSolver {
     }
 
     fn order_by_centroid_tsp(
+        &self,
         lkh_exe: &Path,
         work_dir: &Path,
         centroids: &[LKHNode],
@@ -126,6 +141,9 @@ pub fn solve_tsp_with_lkh_h3_chunked(
     input: SolverInput,
     options: SolverOptions,
 ) -> Result<Vec<LKHNode>> {
+    // cleans up workdir on drop
+    let chunk_solver = ChunkSolver::new(&input.work_dir);
+
     if options.max_chunk_size == 0 {
         return Err(Error::invalid_input(ERR_INVALID_MAX_CHUNK_SIZE));
     }
@@ -166,7 +184,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
 
             let now = Instant::now();
             let tour_local =
-                ChunkSolver::solve_single(&input.lkh_exe, &chunk_dir, &chunk_points, &options)?;
+                chunk_solver.solve_single(&input.lkh_exe, &chunk_dir, &chunk_points, &options)?;
             let tour_global: Vec<usize> = tour_local.into_iter().map(|li| idxs[li]).collect();
 
             log::info!(
@@ -187,7 +205,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
     log::info!("chunked: ordering centroids count={}", centroids.len());
     let order_dir = input.work_dir.join(CHUNK_ORDER_DIR);
     let order =
-        ChunkSolver::order_by_centroid_tsp(&input.lkh_exe, &order_dir, &centroids, &options)?;
+        chunk_solver.order_by_centroid_tsp(&input.lkh_exe, &order_dir, &centroids, &options)?;
 
     let mut ordered_tours: Vec<Vec<usize>> = Vec::with_capacity(solved_chunk_tours.len());
     for ci in order {

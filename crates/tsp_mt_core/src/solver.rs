@@ -18,6 +18,7 @@ use crate::{
     process::LkhProcess,
     projection::PlaneProjection,
     run_spec::RunSpec,
+    utils,
 };
 
 const PREP_RUN_INDEX: usize = 0;
@@ -46,6 +47,8 @@ impl<'a> LkhSolver<'a> {
         let problem_file = work_dir.join(PROBLEM_FILE.tsp());
         let candidate_file = work_dir.join(PROBLEM_FILE.candidate());
         let pi_file = work_dir.join(PROBLEM_FILE.pi());
+
+        // utils::register_workdir_for_shutdown_cleanup(work_dir);
 
         Self {
             executable,
@@ -122,19 +125,11 @@ PI_FILE = {}
     }
 }
 
-impl<'a> Drop for LkhSolver<'a> {
-    fn drop(&mut self) {
-        rm_file(&self.candidate_file);
-        rm_file(&self.pi_file);
-    }
-}
-
-fn rm_file(pb: &Path) {
-    if !pb.exists() {
-        return;
-    }
-    let _ = fs::remove_file(pb);
-}
+// impl<'a> Drop for LkhSolver<'a> {
+//     fn drop(&mut self) {
+//         utils::cleanup_workdir(self.work_dir)
+//     }
+// }
 
 /// Solve TSP by spawning multiple LKH processes in parallel with different SEEDs.
 /// Returns best tour points.
@@ -143,6 +138,8 @@ pub fn solve_tsp_with_lkh_parallel(
     input: SolverInput,
     options: SolverOptions,
 ) -> Result<Vec<LKHNode>> {
+    utils::register_workdir_for_shutdown_cleanup(&input.work_dir);
+
     if input.n() < MIN_CYCLE_POINTS {
         return Err(Error::invalid_input(format!(
             "Need at least {MIN_CYCLE_POINTS} points for a cycle"
@@ -219,6 +216,8 @@ pub fn solve_tsp_with_lkh_parallel(
         "solver: complete runs={run_count} best_tour_m={:.0}",
         best.1
     );
+
+    utils::cleanup_workdir(&input.work_dir);
 
     Ok(best.0.into_iter().map(|idx| input.get_point(idx)).collect())
 }
