@@ -5,6 +5,13 @@ use kiddo::{KdTree, SquaredEuclidean};
 
 use crate::lkh::geometry::TourGeometry;
 
+const LARGE_JUMP_PENALTY: f64 = 500.0;
+const LARGE_JUMP_DISTANCE_THRESHOLD: f64 = 1_000.0;
+const CANDIDATE_PAIR_CHECK_LIMIT: usize = 40;
+const MIN_TOUR_SIZE_FOR_2OPT: usize = 4;
+const TWO_OPT_IMPROVEMENT_EPSILON: f64 = 1e-5;
+const MERGE_EXPECT_NON_EMPTY_TOURS: &str = "tours must be non-empty and candidates found";
+
 struct MergeResult {
     merged: Vec<usize>,
     /// Each index i refers to boundary edge (i -> i+1).
@@ -32,14 +39,14 @@ impl TourStitcher {
 
     pub(crate) fn boundary_two_opt(
         coords: &[Coord],
-        tour: &mut Vec<usize>,
+        tour: &mut [usize],
         boundaries: &[usize],
         window: usize,
         passes: usize,
     ) {
         let now = std::time::Instant::now();
         let n = tour.len();
-        if n < 4 || boundaries.is_empty() {
+        if n < MIN_TOUR_SIZE_FOR_2OPT || boundaries.is_empty() {
             return;
         }
 
@@ -57,7 +64,7 @@ impl TourStitcher {
                         let idx_i = i;
                         let idx_i1 = i + 1;
                         let idx_k = k;
-                        let idx_j = if j == n { 0 } else { j };
+                        let idx_j = j;
 
                         let a = tour[idx_i];
                         let b = tour[idx_i1];
@@ -69,7 +76,7 @@ impl TourStitcher {
                         let new_dist = TourGeometry::dist(coords[a], coords[c])
                             + TourGeometry::dist(coords[b], coords[d]);
 
-                        if new_dist < cur_dist - 1e-5 {
+                        if new_dist < cur_dist - TWO_OPT_IMPROVEMENT_EPSILON {
                             tour[(idx_i + 1)..=idx_k].reverse();
                             improved = true;
                         }
@@ -91,8 +98,6 @@ impl TourStitcher {
     /// Merges two tours by finding the strictly closest points between them.
     /// This prevents random portals from creating large outlier jumps.
     fn merge_two_cycles_dense(coords: &[Coord], tour_a: &[usize], tour_b: &[usize]) -> MergeResult {
-        const LARGE_JUMP_PENALTY: f64 = 500.0;
-
         let mut tree: KdTree<f64, 2> = KdTree::new();
         for &node in tour_b {
             let c = coords[node];
@@ -107,9 +112,9 @@ impl TourStitcher {
             candidates.push((nn.distance, u, nn.item as usize));
         }
 
-        candidates.sort_unstable_by(|x, y| x.0.partial_cmp(&y.0).unwrap());
+        candidates.sort_unstable_by(|x, y| x.0.total_cmp(&y.0));
 
-        let check_limit = 40.min(candidates.len());
+        let check_limit = CANDIDATE_PAIR_CHECK_LIMIT.min(candidates.len());
 
         let pos_a: HashMap<usize, usize> =
             tour_a.iter().enumerate().map(|(i, &n)| (n, i)).collect();
@@ -142,7 +147,9 @@ impl TourStitcher {
                     let e1 = TourGeometry::dist(coords[a1], coords[b2]);
                     let e2 = TourGeometry::dist(coords[b1], coords[a2]);
 
-                    let penalty_fwd = if e1 > 1000.0 || e2 > 1000.0 {
+                    let penalty_fwd = if e1 > LARGE_JUMP_DISTANCE_THRESHOLD
+                        || e2 > LARGE_JUMP_DISTANCE_THRESHOLD
+                    {
                         LARGE_JUMP_PENALTY
                     } else {
                         0.0
@@ -153,7 +160,9 @@ impl TourStitcher {
                     let r1 = TourGeometry::dist(coords[a1], coords[b1]);
                     let r2 = TourGeometry::dist(coords[b2], coords[a2]);
 
-                    let penalty_rev = if r1 > 1000.0 || r2 > 1000.0 {
+                    let penalty_rev = if r1 > LARGE_JUMP_DISTANCE_THRESHOLD
+                        || r2 > LARGE_JUMP_DISTANCE_THRESHOLD
+                    {
                         LARGE_JUMP_PENALTY
                     } else {
                         0.0
@@ -161,10 +170,10 @@ impl TourStitcher {
 
                     let score_rev = (r1 + r2 + penalty_rev) - removed_cost;
 
-                    if best.map_or(true, |x| score_fwd < x.5) {
+                    if best.is_none_or(|x| score_fwd < x.5) {
                         best = Some((a1, a2, b1, b2, false, score_fwd));
                     }
-                    if best.map_or(true, |x| score_rev < x.5) {
+                    if best.is_none_or(|x| score_rev < x.5) {
                         best = Some((a1, a2, b1, b2, true, score_rev));
                     }
                 }
@@ -172,7 +181,7 @@ impl TourStitcher {
         }
 
         let (_a_cut_u, a_cut_v, b_cut_u, b_cut_v, flip_b, _score) =
-            best.expect("tours must be non-empty and candidates found");
+            best.expect(MERGE_EXPECT_NON_EMPTY_TOURS);
 
         let a_lin = TourGeometry::rotate_cycle(tour_a, a_cut_v);
 

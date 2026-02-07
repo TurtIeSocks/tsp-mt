@@ -10,10 +10,29 @@ use geo::Coord;
 use rayon::prelude::*;
 
 use crate::{
-    lkh::{config::LkhConfig, geometry::TourGeometry, run_spec::RunSpec},
+    lkh::{
+        config::LkhConfig,
+        constants::{
+            MIN_CYCLE_POINTS, PLANE_PROJECTION_RADIUS, PREP_CANDIDATES_PAR_FILE,
+            PREP_CANDIDATES_TOUR_FILE, PROBLEM_FILE_CANDIDATE, PROBLEM_FILE_PI, PROBLEM_FILE_TSP,
+            PROBLEM_NAME, THREAD_FALLBACK_PARALLELISM, THREAD_MIN_PARALLELISM,
+            THREAD_RESERVED_CORES, run_par_file, run_tour_file,
+        },
+        geometry::TourGeometry,
+        problem::TsplibProblemWriter,
+        process::LkhProcess,
+        run_spec::RunSpec,
+    },
     project::Plane,
     utils::Point,
 };
+
+const PREP_RUN_INDEX: usize = 0;
+const PREP_SEED: u64 = 1;
+const ERR_LKH_PREPROCESS_FAILED: &str = "LKH preprocessing failed";
+const ERR_MISSING_CANDIDATE_FILE: &str =
+    "LKH finished but candidate file was not created (unexpected).";
+const ERR_NO_RESULTS: &str = "No results";
 
 pub(crate) struct LkhSolver {
     executable: PathBuf,
@@ -25,9 +44,9 @@ pub(crate) struct LkhSolver {
 
 impl LkhSolver {
     pub(crate) fn new(executable: PathBuf, work_dir: PathBuf) -> Self {
-        let problem_file = work_dir.join("problem.tsp");
-        let candidate_file = work_dir.join("problem.cand");
-        let pi_file = work_dir.join("problem.pi");
+        let problem_file = work_dir.join(PROBLEM_FILE_TSP);
+        let candidate_file = work_dir.join(PROBLEM_FILE_CANDIDATE);
+        let pi_file = work_dir.join(PROBLEM_FILE_PI);
 
         Self {
             executable,
@@ -41,9 +60,9 @@ impl LkhSolver {
     pub(crate) fn threads() -> usize {
         thread::available_parallelism()
             .map(|n| n.get())
-            .unwrap_or(2)
-            .max(2)
-            - 1
+            .unwrap_or(THREAD_FALLBACK_PARALLELISM)
+            .max(THREAD_MIN_PARALLELISM)
+            - THREAD_RESERVED_CORES
     }
 
     pub(crate) fn work_dir(&self) -> &Path {
@@ -69,57 +88,24 @@ PI_FILE = {}
 
     /// Write TSPLIB EUC_2D problem using projected XY.
     pub(crate) fn create_problem_file(&self, points: &[Coord]) -> io::Result<()> {
-        let mut s = String::new();
-        s.push_str("NAME: problem\n");
-        s.push_str("TYPE: TSP\n");
-        s.push_str(&format!("DIMENSION: {}\n", points.len()));
-        s.push_str("EDGE_WEIGHT_TYPE: EUC_2D\n");
-        s.push_str("NODE_COORD_SECTION\n");
-        for (i, p) in points.iter().enumerate() {
-            s.push_str(&format!(
-                "{} {:.0} {:.0}\n",
-                i + 1,
-                p.x * 1000.0,
-                p.y * 1000.0
-            ));
-        }
-        s.push_str("EOF\n");
-        fs::write(&self.problem_file, s)?;
-        Ok(())
+        TsplibProblemWriter::write_euc2d(&self.problem_file, PROBLEM_NAME, points)
     }
 
     pub(crate) fn ensure_candidate_file(&self, n: usize) -> io::Result<()> {
-        let prep_par = self.work_dir.join("prep_candidates.par");
-        let prep_tour = self.work_dir.join("prep_candidates.tour");
+        let prep_par = self.work_dir.join(PREP_CANDIDATES_PAR_FILE);
+        let prep_tour = self.work_dir.join(PREP_CANDIDATES_TOUR_FILE);
 
-        let rs = RunSpec {
-            idx: 0,
-            par_path: prep_par.clone(),
-            seed: 1,
-            tour_path: prep_tour,
-        };
+        let rs = RunSpec::new(PREP_RUN_INDEX, PREP_SEED, prep_par.clone(), prep_tour);
 
         let prep_cfg = LkhConfig::preprocessing(n);
         rs.write_lkh_par(&prep_cfg, self)?;
 
         let out = self.run(&prep_par)?;
 
-        if !out.status.success() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "LKH preprocessing failed.\nSTDOUT:\n{}\nSTDERR:\n{}",
-                    String::from_utf8_lossy(&out.stdout),
-                    String::from_utf8_lossy(&out.stderr),
-                ),
-            ));
-        }
+        LkhProcess::ensure_success(ERR_LKH_PREPROCESS_FAILED, &out)?;
 
         if !self.candidate_file.exists() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "LKH finished but candidate file was not created (unexpected).",
-            ));
+            return Err(io::Error::other(ERR_MISSING_CANDIDATE_FILE));
         }
 
         Ok(())
@@ -156,10 +142,10 @@ pub fn solve_tsp_with_lkh_parallel(
     work_dir: PathBuf,
     input: &[Point],
 ) -> io::Result<Vec<Point>> {
-    if input.len() < 3 {
+    if input.len() < MIN_CYCLE_POINTS {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "Need at least 3 points for a cycle",
+            format!("Need at least {MIN_CYCLE_POINTS} points for a cycle"),
         ));
     }
 
@@ -167,7 +153,7 @@ pub fn solve_tsp_with_lkh_parallel(
     let solver = LkhSolver::new(lkh_exe, work_dir);
     solver.create_work_dir()?;
 
-    let points = Plane::new(&input.to_vec()).radius(70.0).project();
+    let points = Plane::new(input).radius(PLANE_PROJECTION_RADIUS).project();
 
     solver.create_problem_file(&points)?;
     solver.ensure_candidate_file(points.len())?;
@@ -183,37 +169,30 @@ pub fn solve_tsp_with_lkh_parallel(
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(parallelism)
         .build()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("rayon pool: {e}")))?;
+        .map_err(|e| io::Error::other(format!("rayon pool: {e}")))?;
 
-    let mut results: Vec<(Vec<usize>, f64)> = pool.install(|| {
+    let results: Vec<(Vec<usize>, f64)> = pool.install(|| {
         cfg.generate_seeds(parallelism)
             .into_par_iter()
             .enumerate()
             .map(|(idx, seed)| -> io::Result<(Vec<usize>, f64)> {
-                let rs = RunSpec {
+                let rs = RunSpec::new(
                     idx,
                     seed,
-                    par_path: solver.work_dir().join(format!("run_{idx}.par")),
-                    tour_path: solver.work_dir().join(format!("run_{idx}.tour")),
-                };
+                    solver.work_dir().join(run_par_file(idx)),
+                    solver.work_dir().join(run_tour_file(idx)),
+                );
                 rs.write_lkh_par(&cfg, &solver)?;
 
                 let now = Instant::now();
                 eprintln!("Starting tour for thread {idx}");
 
-                let out = solver.run(&rs.par_path)?;
+                let out = solver.run(rs.par_path())?;
 
-                if !out.status.success() {
-                    let stderr = String::from_utf8_lossy(&out.stderr);
-                    let stdout = String::from_utf8_lossy(&out.stdout);
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!(
-                            "LKH failed (run idx={}, seed={}).\nSTDOUT:\n{}\nSTDERR:\n{}",
-                            rs.idx, rs.seed, stdout, stderr
-                        ),
-                    ));
-                }
+                LkhProcess::ensure_success(
+                    &format!("LKH failed (run idx={}, seed={})", rs.idx(), rs.seed()),
+                    &out,
+                )?;
 
                 let tour = rs.parse_tsplib_tour(points.len())?;
                 let len = TourGeometry::tour_length(&points, &tour);
@@ -227,11 +206,10 @@ pub fn solve_tsp_with_lkh_parallel(
             .collect::<io::Result<Vec<_>>>()
     })?;
 
-    results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
     let tour = results
         .into_iter()
-        .next()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "No results"))?;
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .ok_or_else(|| io::Error::other(ERR_NO_RESULTS))?;
 
     Ok(tour.0.into_iter().map(|idx| input[idx]).collect())
 }

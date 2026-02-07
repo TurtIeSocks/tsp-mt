@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::{fmt, io::Read};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Point {
@@ -8,11 +8,11 @@ pub struct Point {
 
 const R: f64 = 6_371_000.0;
 
-impl ToString for Point {
-    fn to_string(&self) -> String {
+impl fmt::Display for Point {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut b1 = ryu::Buffer::new();
         let mut b2 = ryu::Buffer::new();
-        format!("{},{}", b1.format(self.lat), b2.format(self.lng))
+        write!(f, "{},{}", b1.format(self.lat), b2.format(self.lng))
     }
 }
 

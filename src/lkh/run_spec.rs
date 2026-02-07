@@ -5,15 +5,46 @@ use std::{
 
 use crate::lkh::{config::LkhConfig, solver::LkhSolver};
 
+const SMALL_RUNS: usize = 1;
+const SMALL_TRACE_LEVEL: usize = 0;
+const SMALL_MAX_CANDIDATES: usize = 32;
+
+const TOUR_SECTION_HEADER: &str = "TOUR_SECTION";
+const TOUR_END_MARKER: &str = "-1";
+const EOF_MARKER: &str = "EOF";
+const MIN_VALID_TSPLIB_NODE_ID: isize = 1;
+const TSPLIB_NODE_ID_OFFSET: usize = 1;
+
 #[derive(Clone, Debug)]
 pub(crate) struct RunSpec {
-    pub(crate) idx: usize,
-    pub(crate) seed: u64,
-    pub(crate) par_path: PathBuf,
-    pub(crate) tour_path: PathBuf,
+    idx: usize,
+    seed: u64,
+    par_path: PathBuf,
+    tour_path: PathBuf,
 }
 
 impl RunSpec {
+    pub(crate) fn new(idx: usize, seed: u64, par_path: PathBuf, tour_path: PathBuf) -> Self {
+        Self {
+            idx,
+            seed,
+            par_path,
+            tour_path,
+        }
+    }
+
+    pub(crate) fn idx(&self) -> usize {
+        self.idx
+    }
+
+    pub(crate) fn seed(&self) -> u64 {
+        self.seed
+    }
+
+    pub(crate) fn par_path(&self) -> &Path {
+        &self.par_path
+    }
+
     fn param_file(&self) -> String {
         format!(
             "OUTPUT_TOUR_FILE = {}\nSEED = {}",
@@ -44,18 +75,21 @@ impl RunSpec {
             "\
 PROBLEM_FILE = {}
 OUTPUT_TOUR_FILE = {}
-RUNS = 1
+RUNS = {}
 MAX_TRIALS = {}
 SEED = {}
-TRACE_LEVEL = 0
+TRACE_LEVEL = {}
 TIME_LIMIT = {}
-MAX_CANDIDATES = 32 SYMMETRIC
+MAX_CANDIDATES = {} SYMMETRIC
 ",
             problem_path.display(),
             self.tour_path.display(),
+            SMALL_RUNS,
             max_trials,
             self.seed,
+            SMALL_TRACE_LEVEL,
             time_limit,
+            SMALL_MAX_CANDIDATES,
         );
 
         fs::write(&self.par_path, s)
@@ -68,14 +102,14 @@ MAX_CANDIDATES = 32 SYMMETRIC
 
         for line in text.lines() {
             let line = line.trim();
-            if line.eq_ignore_ascii_case("TOUR_SECTION") {
+            if line.eq_ignore_ascii_case(TOUR_SECTION_HEADER) {
                 in_section = true;
                 continue;
             }
             if !in_section {
                 continue;
             }
-            if line == "-1" || line.eq_ignore_ascii_case("EOF") {
+            if line == TOUR_END_MARKER || line.eq_ignore_ascii_case(EOF_MARKER) {
                 break;
             }
             let id: isize = line.parse().map_err(|e| {
@@ -84,10 +118,10 @@ MAX_CANDIDATES = 32 SYMMETRIC
                     format!("Bad tour line '{line}': {e}"),
                 )
             })?;
-            if id <= 0 {
+            if id < MIN_VALID_TSPLIB_NODE_ID {
                 continue;
             }
-            tour.push((id as usize) - 1);
+            tour.push((id as usize) - TSPLIB_NODE_ID_OFFSET);
         }
 
         if tour.len() != n {

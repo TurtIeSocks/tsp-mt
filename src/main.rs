@@ -41,7 +41,7 @@ fn main() -> std::io::Result<()> {
     // let route = route.into_iter().map(|idx| points[idx]).collect::<Vec<_>>();
 
     for point in route.iter() {
-        println!("{}", point.to_string());
+        println!("{point}");
     }
 
     eprintln!("Output length: {}", route.len());

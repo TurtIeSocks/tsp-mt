@@ -4,16 +4,18 @@ use h3o::{CellIndex, LatLng, Resolution};
 
 use crate::utils::Point;
 
+const INITIAL_RESOLUTION: Resolution = Resolution::Four;
+const MAX_RESOLUTION: Resolution = Resolution::Fifteen;
+const VALID_LAT_LNG_EXPECT: &str = "valid lat/lng";
+
 pub(crate) struct H3Chunker;
 
 impl H3Chunker {
     pub(crate) fn partition_indices(input: &[Point], max_bucket_sz: usize) -> Vec<Vec<usize>> {
-        const MAX_RES: Resolution = Resolution::Fifteen;
-
-        let mut res = Resolution::Four;
+        let mut res = INITIAL_RESOLUTION;
         let mut buckets = Self::bucket_by_res(input, res, None);
 
-        while Self::max_bucket(&buckets) > max_bucket_sz && res != MAX_RES {
+        while Self::max_bucket(&buckets) > max_bucket_sz && res != MAX_RESOLUTION {
             res = Self::next_resolution(res);
             buckets = Self::bucket_by_res(input, res, None);
         }
@@ -29,7 +31,7 @@ impl H3Chunker {
             let mut local_res = res;
             let mut frontier: Vec<Vec<usize>> = vec![idxs];
 
-            while local_res != MAX_RES && frontier.iter().any(|b| b.len() > max_bucket_sz) {
+            while local_res != MAX_RESOLUTION && frontier.iter().any(|b| b.len() > max_bucket_sz) {
                 local_res = Self::next_resolution(local_res);
                 let mut next_frontier: Vec<Vec<usize>> = Vec::new();
 
@@ -89,16 +91,22 @@ impl H3Chunker {
         subset: Option<&[usize]>,
     ) -> HashMap<CellIndex, Vec<usize>> {
         let mut map: HashMap<CellIndex, Vec<usize>> = HashMap::new();
-        let iter: Box<dyn Iterator<Item = usize>> = match subset {
-            Some(idxs) => Box::new(idxs.iter().copied()),
-            None => Box::new((0..input.len()).into_iter()),
-        };
 
-        for i in iter {
+        let mut add_index = |i: usize| {
             let p = &input[i];
-            let ll = LatLng::new(p.lat, p.lng).expect("valid lat/lng");
+            let ll = LatLng::new(p.lat, p.lng).expect(VALID_LAT_LNG_EXPECT);
             let cell = ll.to_cell(res);
             map.entry(cell).or_default().push(i);
+        };
+
+        if let Some(idxs) = subset {
+            for &i in idxs {
+                add_index(i);
+            }
+        } else {
+            for i in 0..input.len() {
+                add_index(i);
+            }
         }
 
         map

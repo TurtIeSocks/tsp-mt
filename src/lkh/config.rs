@@ -1,5 +1,14 @@
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
+const MAX_TRIALS_MULTIPLIER: usize = 3;
+const MIN_MAX_TRIALS: usize = 1_000;
+const MAX_MAX_TRIALS: usize = 100_000;
+const TIME_LIMIT_DIVISOR: usize = 512;
+const MIN_TIME_LIMIT_SECONDS: usize = 2;
+
+const PREPROCESS_RUNS: usize = 1;
+const PREPROCESS_TIME_LIMIT_SECONDS: usize = 1;
+
 #[derive(Clone, Debug)]
 pub(crate) struct LkhConfig {
     /// Trials per process.
@@ -18,8 +27,8 @@ pub(crate) struct LkhConfig {
 impl LkhConfig {
     pub(crate) fn new(n: usize) -> Self {
         Self {
-            max_trials: (n * 3).max(1_000).min(100_000),
-            time_limit: (n / 512).max(2),
+            max_trials: (n * MAX_TRIALS_MULTIPLIER).clamp(MIN_MAX_TRIALS, MAX_MAX_TRIALS),
+            time_limit: (n / TIME_LIMIT_DIVISOR).max(MIN_TIME_LIMIT_SECONDS),
             ..Default::default()
         }
     }
@@ -27,8 +36,8 @@ impl LkhConfig {
     pub(crate) fn preprocessing(n: usize) -> Self {
         Self {
             max_trials: n,
-            runs: 1,
-            time_limit: 1,
+            runs: PREPROCESS_RUNS,
+            time_limit: PREPROCESS_TIME_LIMIT_SECONDS,
             ..Default::default()
         }
     }
@@ -65,9 +74,9 @@ MAX_CANDIDATES = {} SYMMETRIC
 impl Default for LkhConfig {
     fn default() -> Self {
         Self {
-            max_trials: 10000,
+            max_trials: 10_000,
             runs: 1,
-            base_seed: 12345,
+            base_seed: 12_345,
             trace_level: 1,
             time_limit: 60,
             max_candidates: 32,

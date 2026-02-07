@@ -1,5 +1,7 @@
 use geo::Coord;
 
+const ROTATE_CYCLE_EXPECT_START_NODE: &str = "start_node not found";
+
 pub(crate) struct TourGeometry;
 
 impl TourGeometry {
@@ -39,7 +41,7 @@ impl TourGeometry {
         let pos = tour
             .iter()
             .position(|&x| x == start_node)
-            .expect("start_node not found");
+            .expect(ROTATE_CYCLE_EXPECT_START_NODE);
         let mut out = Vec::with_capacity(tour.len());
         out.extend_from_slice(&tour[pos..]);
         out.extend_from_slice(&tour[..pos]);

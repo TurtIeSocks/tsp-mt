@@ -10,12 +10,34 @@ use rayon::prelude::*;
 
 use crate::{
     lkh::{
-        config::LkhConfig, geometry::TourGeometry, h3_chunking::H3Chunker, run_spec::RunSpec,
-        solver::LkhSolver, stitching::TourStitcher,
+        config::LkhConfig,
+        constants::{
+            CENTROIDS_NAME, CENTROIDS_PAR_FILE, CENTROIDS_TOUR_FILE, CENTROIDS_TSP_FILE,
+            CHUNK_DIR_PREFIX, CHUNK_ORDER_DIR, MIN_CYCLE_POINTS, PLANE_PROJECTION_RADIUS,
+            run_par_file, run_tour_file,
+        },
+        geometry::TourGeometry,
+        h3_chunking::H3Chunker,
+        problem::TsplibProblemWriter,
+        process::LkhProcess,
+        run_spec::RunSpec,
+        solver::LkhSolver,
+        stitching::TourStitcher,
     },
     project::Plane,
     utils::Point,
 };
+
+const MAX_CHUNK: usize = 5_000;
+const CENTROID_ORDER_SEED: u64 = 999;
+const CENTROID_ORDER_MAX_TRIALS: usize = 20_000;
+const CENTROID_ORDER_TIME_LIMIT: usize = 10;
+const BOUNDARY_2OPT_WINDOW: usize = 500;
+const BOUNDARY_2OPT_PASSES: usize = 50;
+const RUN_INDEX_SINGLE: usize = 0;
+const MAX_CENTROIDS_WITH_TRIVIAL_ORDER: usize = 2;
+const ERR_LKH_CHUNK_FAILED: &str = "LKH chunk failed";
+const ERR_CENTROID_ORDERING_FAILED: &str = "Centroid ordering LKH failed";
 
 struct ChunkSolver;
 
@@ -26,7 +48,7 @@ impl ChunkSolver {
         chunk_points: &[Point],
     ) -> io::Result<Vec<usize>> {
         let n = chunk_points.len();
-        if n < 3 {
+        if n < MIN_CYCLE_POINTS {
             return Ok(chunk_points
                 .iter()
                 .enumerate()
@@ -38,31 +60,23 @@ impl ChunkSolver {
         let solver = LkhSolver::new(lkh_exe, work_dir);
         solver.create_work_dir()?;
 
-        let pts = Plane::new(&chunk_points.to_vec()).radius(70.0).project();
+        let pts = Plane::new(chunk_points)
+            .radius(PLANE_PROJECTION_RADIUS)
+            .project();
 
         solver.create_problem_file(&pts)?;
         solver.ensure_candidate_file(pts.len())?;
 
-        let rs = RunSpec {
-            idx: 0,
-            seed: cfg.base_seed(),
-            par_path: solver.work_dir().join("run_0.par"),
-            tour_path: solver.work_dir().join("run_0.tour"),
-        };
+        let rs = RunSpec::new(
+            RUN_INDEX_SINGLE,
+            cfg.base_seed(),
+            solver.work_dir().join(run_par_file(RUN_INDEX_SINGLE)),
+            solver.work_dir().join(run_tour_file(RUN_INDEX_SINGLE)),
+        );
         rs.write_lkh_par(&cfg, &solver)?;
 
-        let out = solver.run(&rs.par_path)?;
-
-        if !out.status.success() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "LKH chunk failed.\nSTDOUT:\n{}\nSTDERR:\n{}",
-                    String::from_utf8_lossy(&out.stdout),
-                    String::from_utf8_lossy(&out.stderr),
-                ),
-            ));
-        }
+        let out = solver.run(rs.par_path())?;
+        LkhProcess::ensure_success(ERR_LKH_CHUNK_FAILED, &out)?;
 
         rs.parse_tsplib_tour(n)
     }
@@ -72,57 +86,34 @@ impl ChunkSolver {
         work_dir: &Path,
         centroids: &[Coord],
     ) -> io::Result<Vec<usize>> {
-        if centroids.len() <= 2 {
+        if centroids.len() <= MAX_CENTROIDS_WITH_TRIVIAL_ORDER {
             return Ok((0..centroids.len()).collect());
         }
 
         fs::create_dir_all(work_dir)?;
 
-        let problem = work_dir.join("centroids.tsp");
-        Self::write_centroid_problem(&problem, centroids)?;
+        let problem = work_dir.join(CENTROIDS_TSP_FILE);
+        TsplibProblemWriter::write_euc2d(&problem, CENTROIDS_NAME, centroids)?;
 
-        let rs = RunSpec {
-            idx: 0,
-            seed: 999,
-            par_path: work_dir.join("centroids.par"),
-            tour_path: work_dir.join("centroids.tour"),
-        };
-        rs.write_lkh_par_small(&problem, 20_000, 10)?;
+        let rs = RunSpec::new(
+            RUN_INDEX_SINGLE,
+            CENTROID_ORDER_SEED,
+            work_dir.join(CENTROIDS_PAR_FILE),
+            work_dir.join(CENTROIDS_TOUR_FILE),
+        );
+        rs.write_lkh_par_small(
+            &problem,
+            CENTROID_ORDER_MAX_TRIALS,
+            CENTROID_ORDER_TIME_LIMIT,
+        )?;
 
         let out = Command::new(lkh_exe)
-            .arg(&rs.par_path)
+            .arg(rs.par_path())
             .current_dir(work_dir)
             .output()?;
-
-        if !out.status.success() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Centroid ordering LKH failed.\nSTDOUT:\n{}\nSTDERR:\n{}",
-                    String::from_utf8_lossy(&out.stdout),
-                    String::from_utf8_lossy(&out.stderr),
-                ),
-            ));
-        }
+        LkhProcess::ensure_success(ERR_CENTROID_ORDERING_FAILED, &out)?;
 
         rs.parse_tsplib_tour(centroids.len())
-    }
-
-    fn write_centroid_problem(problem: &Path, centroids: &[Coord]) -> io::Result<()> {
-        let mut s = String::new();
-        s.push_str("NAME: centroids\nTYPE: TSP\n");
-        s.push_str(&format!("DIMENSION: {}\n", centroids.len()));
-        s.push_str("EDGE_WEIGHT_TYPE: EUC_2D\nNODE_COORD_SECTION\n");
-        for (i, p) in centroids.iter().enumerate() {
-            s.push_str(&format!(
-                "{} {:.0} {:.0}\n",
-                i + 1,
-                p.x * 1000.0,
-                p.y * 1000.0
-            ));
-        }
-        s.push_str("EOF\n");
-        fs::write(problem, s)
     }
 }
 
@@ -131,13 +122,11 @@ pub fn solve_tsp_with_lkh_h3_chunked(
     work_dir: PathBuf,
     input: &[Point],
 ) -> io::Result<Vec<Point>> {
-    const MAX_CHUNK: usize = 5_000;
-
     if input.len() <= MAX_CHUNK {
         return super::solve_tsp_with_lkh_parallel(lkh_exe, work_dir, input);
     }
 
-    let global_coords = Plane::new(&input.to_vec()).radius(70.0).project();
+    let global_coords = Plane::new(input).radius(PLANE_PROJECTION_RADIUS).project();
 
     let chunks = H3Chunker::partition_indices(input, MAX_CHUNK);
     eprintln!(
@@ -152,7 +141,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         .enumerate()
         .map(|(chunk_id, idxs)| -> io::Result<Vec<usize>> {
             let chunk_points: Vec<Point> = idxs.iter().map(|&i| input[i]).collect();
-            let chunk_dir = work_dir.join(format!("chunk_{chunk_id}"));
+            let chunk_dir = work_dir.join(format!("{CHUNK_DIR_PREFIX}{chunk_id}"));
 
             let now = Instant::now();
             let tour_local = ChunkSolver::solve_single(lkh_exe.clone(), chunk_dir, &chunk_points)?;
@@ -173,7 +162,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         .map(|idxs| TourGeometry::centroid_of_indices(&global_coords, idxs))
         .collect();
 
-    let order_dir = work_dir.join("chunk_order");
+    let order_dir = work_dir.join(CHUNK_ORDER_DIR);
     let order = ChunkSolver::order_by_centroid_tsp(&lkh_exe, &order_dir, &centroids)?;
 
     let mut ordered_tours: Vec<Vec<usize>> = Vec::with_capacity(solved_chunk_tours.len());
@@ -184,7 +173,13 @@ pub fn solve_tsp_with_lkh_h3_chunked(
     let (mut merged, boundaries) =
         TourStitcher::stitch_chunk_tours_dense(&global_coords, ordered_tours);
 
-    TourStitcher::boundary_two_opt(&global_coords, &mut merged, &boundaries, 500, 50);
+    TourStitcher::boundary_two_opt(
+        &global_coords,
+        &mut merged,
+        &boundaries,
+        BOUNDARY_2OPT_WINDOW,
+        BOUNDARY_2OPT_PASSES,
+    );
 
     Ok(merged.into_iter().map(|i| input[i]).collect())
 }
