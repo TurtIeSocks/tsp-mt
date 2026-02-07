@@ -1,7 +1,8 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Command, time::Instant,
+    process::Command,
+    time::Instant,
 };
 
 use rayon::prelude::*;

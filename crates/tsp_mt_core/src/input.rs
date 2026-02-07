@@ -1,16 +1,22 @@
 use std::{
-    env, fmt,
+    env,
     io::Read,
     path::{Path, PathBuf},
 };
+use tsp_mt_derive::{CliOptions, KvDisplay};
 
 use crate::{Error, LKHNode, Result, embedded_lkh};
 
 /// Runtime input for LKH solver.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, CliOptions, KvDisplay)]
 pub struct SolverInput {
+    #[cli(long = "lkh-exe")]
+    #[kv(fmt = "path")]
     pub(crate) lkh_exe: PathBuf,
+    #[cli(long = "work-dir")]
+    #[kv(fmt = "path")]
     pub(crate) work_dir: PathBuf,
+    #[kv(fmt = "len")]
     pub(crate) points: Vec<LKHNode>,
 }
 
@@ -25,8 +31,12 @@ impl SolverInput {
 
     pub fn from_args() -> Result<Self> {
         let current = env::current_dir()?;
-        let mut lkh_exe = None;
-        let mut work_dir = current.join(".temp");
+        let mut input = Self {
+            lkh_exe: PathBuf::new(),
+            work_dir: current.join(".temp"),
+            points: Vec::new(),
+        };
+        let mut saw_lkh_exe = false;
 
         let mut args = env::args().skip(1).peekable();
         while let Some(arg) = args.next() {
@@ -37,32 +47,17 @@ impl SolverInput {
                 continue;
             };
 
-            let (name, value) = split_arg(raw_name, &mut args);
-
-            match name.as_str() {
-                "lkh-exe" => {
-                    let raw = value.ok_or_else(|| {
-                        Error::invalid_input(format!("Missing value for --{}", name))
-                    })?;
-                    lkh_exe = Some(PathBuf::from(raw));
-                }
-                "work-dir" => {
-                    let raw = value.ok_or_else(|| {
-                        Error::invalid_input(format!("Missing value for --{}", name))
-                    })?;
-                    work_dir = PathBuf::from(raw);
-                }
-                _ => {}
+            let (name, value) = Self::split_arg(raw_name, &mut args);
+            if input.apply_cli_option(&name, value)? && name == "lkh-exe" {
+                saw_lkh_exe = true;
             }
         }
 
-        let points = read_points_from_stdin()?;
-        let lkh_exe = lkh_exe.unwrap_or(embedded_lkh::ensure_lkh_executable()?);
-        Ok(Self {
-            lkh_exe,
-            work_dir,
-            points,
-        })
+        if !saw_lkh_exe {
+            input.lkh_exe = embedded_lkh::ensure_lkh_executable()?;
+        }
+        input.points = read_points_from_stdin()?;
+        Ok(input)
     }
 
     pub fn usage() -> &'static str {
@@ -92,34 +87,6 @@ impl SolverInput {
     pub(crate) fn get_point(&self, idx: usize) -> LKHNode {
         self.points[idx]
     }
-}
-
-impl fmt::Display for SolverInput {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "lkh_exe={} work_dir={} points={}",
-            self.lkh_exe.display(),
-            self.work_dir.display(),
-            self.points.len()
-        )
-    }
-}
-
-fn split_arg(
-    raw_name: &str,
-    args: &mut std::iter::Peekable<impl Iterator<Item = String>>,
-) -> (String, Option<String>) {
-    if let Some((k, v)) = raw_name.split_once('=') {
-        return (k.to_string(), Some(v.to_string()));
-    }
-
-    let value = match args.peek() {
-        Some(next) if !next.starts_with("--") => args.next(),
-        _ => None,
-    };
-
-    (raw_name.to_string(), value)
 }
 
 fn read_points_from_stdin() -> Result<Vec<LKHNode>> {

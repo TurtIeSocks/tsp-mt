@@ -1,37 +1,49 @@
-use std::{env, fmt};
+use std::env;
 
 use log::LevelFilter;
+use tsp_mt_derive::{CliOptions, CliValue, KvDisplay};
 
 use crate::{Error, Result};
 
 /// Runtime options for LKH solving behavior.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, CliOptions, KvDisplay)]
 pub struct SolverOptions {
     /// Radius used by local tangent-plane projection (in meters).
+    #[cli(long = "projection-radius")]
     pub projection_radius: f64,
     /// Maximum number of points per H3 chunk before hierarchical chunking is applied.
+    #[cli(long = "max-chunk-size")]
     pub max_chunk_size: usize,
     /// Random seed used when ordering chunk centroids with LKH.
+    #[cli(long = "centroid-order-seed")]
     pub centroid_order_seed: u64,
     /// `MAX_TRIALS` for centroid-ordering LKH run.
+    #[cli(long = "centroid-order-max-trials")]
     pub centroid_order_max_trials: usize,
     /// `TIME_LIMIT` (seconds) for centroid-ordering LKH run.
+    #[cli(long = "centroid-order-time-limit")]
     pub centroid_order_time_limit: usize,
     /// Window size for boundary-local 2-opt refinement after chunk stitching.
+    #[cli(long = "boundary-2opt-window")]
     pub boundary_2opt_window: usize,
     /// Number of passes for boundary-local 2-opt refinement.
+    #[cli(long = "boundary-2opt-passes")]
     pub boundary_2opt_passes: usize,
     /// Structured logging level.
+    #[cli(long = "log-level", parse_with = "LogLevel::parse")]
     pub log_level: LogLevel,
     /// Logging output format.
+    #[cli(long = "log-format", parse_with = "LogFormat::parse")]
     pub log_format: LogFormat,
     /// Include timestamps in log lines.
     pub log_timestamp: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, CliValue)]
+#[cli_value(option = "log-level")]
 pub enum LogLevel {
     Error,
+    #[cli(alias = "warning")]
     Warn,
     Info,
     Debug,
@@ -40,20 +52,6 @@ pub enum LogLevel {
 }
 
 impl LogLevel {
-    fn parse(raw: &str) -> Result<Self> {
-        match raw.to_ascii_lowercase().as_str() {
-            "error" => Ok(Self::Error),
-            "warn" | "warning" => Ok(Self::Warn),
-            "info" => Ok(Self::Info),
-            "debug" => Ok(Self::Debug),
-            "trace" => Ok(Self::Trace),
-            "off" => Ok(Self::Off),
-            _ => Err(Error::invalid_input(format!(
-                "Invalid value for --log-level: {raw} (expected error|warn|info|debug|trace|off)"
-            ))),
-        }
-    }
-
     pub fn to_filter(self) -> LevelFilter {
         match self {
             Self::Error => LevelFilter::Error,
@@ -66,46 +64,11 @@ impl LogLevel {
     }
 }
 
-impl fmt::Display for LogLevel {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let value = match self {
-            Self::Error => "error",
-            Self::Warn => "warn",
-            Self::Info => "info",
-            Self::Debug => "debug",
-            Self::Trace => "trace",
-            Self::Off => "off",
-        };
-        write!(f, "{value}")
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, CliValue)]
+#[cli_value(option = "log-format")]
 pub enum LogFormat {
     Compact,
     Pretty,
-}
-
-impl LogFormat {
-    fn parse(raw: &str) -> Result<Self> {
-        match raw.to_ascii_lowercase().as_str() {
-            "compact" => Ok(Self::Compact),
-            "pretty" => Ok(Self::Pretty),
-            _ => Err(Error::invalid_input(format!(
-                "Invalid value for --log-format: {raw} (expected compact|pretty)"
-            ))),
-        }
-    }
-}
-
-impl fmt::Display for LogFormat {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let value = match self {
-            Self::Compact => "compact",
-            Self::Pretty => "pretty",
-        };
-        write!(f, "{value}")
-    }
 }
 
 impl Default for SolverOptions {
@@ -149,42 +112,13 @@ impl SolverOptions {
                 )));
             }
 
-            let (name, value) = split_arg(raw_name, &mut args);
+            let (name, value) = Self::split_arg(raw_name, &mut args);
+
+            if options.apply_cli_option(&name, value.clone())? {
+                continue;
+            }
 
             match name.as_str() {
-                "projection-radius" => {
-                    options.projection_radius = parse_value::<f64>(&name, value)?;
-                }
-                "max-chunk-size" => {
-                    options.max_chunk_size = parse_value::<usize>(&name, value)?;
-                }
-                "centroid-order-seed" => {
-                    options.centroid_order_seed = parse_value::<u64>(&name, value)?;
-                }
-                "centroid-order-max-trials" => {
-                    options.centroid_order_max_trials = parse_value::<usize>(&name, value)?;
-                }
-                "centroid-order-time-limit" => {
-                    options.centroid_order_time_limit = parse_value::<usize>(&name, value)?;
-                }
-                "boundary-2opt-window" => {
-                    options.boundary_2opt_window = parse_value::<usize>(&name, value)?;
-                }
-                "boundary-2opt-passes" => {
-                    options.boundary_2opt_passes = parse_value::<usize>(&name, value)?;
-                }
-                "log-level" => {
-                    let raw = value.ok_or_else(|| {
-                        Error::invalid_input(format!("Missing value for --{name}"))
-                    })?;
-                    options.log_level = LogLevel::parse(&raw)?;
-                }
-                "log-format" => {
-                    let raw = value.ok_or_else(|| {
-                        Error::invalid_input(format!("Missing value for --{name}"))
-                    })?;
-                    options.log_format = LogFormat::parse(&raw)?;
-                }
                 "log-timestamp" => {
                     options.log_timestamp = match value {
                         Some(v) => parse_bool(&name, &v)?,
@@ -249,35 +183,6 @@ impl SolverOptions {
     }
 }
 
-impl fmt::Display for SolverOptions {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "projection_radius={} max_chunk_size={} centroid_order_seed={} centroid_order_max_trials={} centroid_order_time_limit={} boundary_2opt_window={} boundary_2opt_passes={} log_level={} log_format={} log_timestamp={}",
-            self.projection_radius,
-            self.max_chunk_size,
-            self.centroid_order_seed,
-            self.centroid_order_max_trials,
-            self.centroid_order_time_limit,
-            self.boundary_2opt_window,
-            self.boundary_2opt_passes,
-            self.log_level,
-            self.log_format,
-            self.log_timestamp
-        )
-    }
-}
-
-fn parse_value<T>(name: &str, value: Option<String>) -> Result<T>
-where
-    T: std::str::FromStr,
-    T::Err: std::fmt::Display,
-{
-    let raw = value.ok_or_else(|| Error::invalid_input(format!("Missing value for --{name}")))?;
-    raw.parse::<T>()
-        .map_err(|e| Error::invalid_input(format!("Invalid value for --{name}: {raw} ({e})")))
-}
-
 fn parse_bool(name: &str, value: &str) -> Result<bool> {
     match value {
         "1" | "true" | "TRUE" | "True" | "yes" | "YES" | "on" | "ON" => Ok(true),
@@ -286,20 +191,4 @@ fn parse_bool(name: &str, value: &str) -> Result<bool> {
             "Invalid boolean for --{name}: {value} (expected true/false)"
         ))),
     }
-}
-
-fn split_arg(
-    raw_name: &str,
-    args: &mut std::iter::Peekable<impl Iterator<Item = String>>,
-) -> (String, Option<String>) {
-    if let Some((k, v)) = raw_name.split_once('=') {
-        return (k.to_string(), Some(v.to_string()));
-    }
-
-    let value = match args.peek() {
-        Some(next) if !next.starts_with("--") => args.next(),
-        _ => None,
-    };
-
-    (raw_name.to_string(), value)
 }
