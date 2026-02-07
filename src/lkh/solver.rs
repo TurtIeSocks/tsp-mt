@@ -9,30 +9,30 @@ use std::{
 use geo::Coord;
 use rayon::prelude::*;
 
-use crate::{
-    lkh::{
-        config::LkhConfig,
-        constants::{
-            MIN_CYCLE_POINTS, PLANE_PROJECTION_RADIUS, PREP_CANDIDATES_PAR_FILE,
-            PREP_CANDIDATES_TOUR_FILE, PROBLEM_FILE_CANDIDATE, PROBLEM_FILE_PI, PROBLEM_FILE_TSP,
-            PROBLEM_NAME, THREAD_FALLBACK_PARALLELISM, THREAD_MIN_PARALLELISM,
-            THREAD_RESERVED_CORES, run_par_file, run_tour_file,
-        },
-        geometry::TourGeometry,
-        problem::TsplibProblemWriter,
-        process::LkhProcess,
-        run_spec::RunSpec,
-    },
-    project::Plane,
-    utils::Point,
+use crate::lkh::{
+    config::LkhConfig,
+    constants::{MIN_CYCLE_POINTS, PREP_CANDIDATES_FILE, PROBLEM_FILE, RUN_FILE},
+    geometry::TourGeometry,
+    options::SolverOptions,
+    point::Point,
+    problem::TsplibProblemWriter,
+    process::LkhProcess,
+    projection::PlaneProjection,
+    run_spec::RunSpec,
 };
 
 const PREP_RUN_INDEX: usize = 0;
 const PREP_SEED: u64 = 1;
+const THREAD_FALLBACK_PARALLELISM: usize = 2;
+const THREAD_MIN_PARALLELISM: usize = 2;
+const THREAD_RESERVED_CORES: usize = 1;
+
 const ERR_LKH_PREPROCESS_FAILED: &str = "LKH preprocessing failed";
 const ERR_MISSING_CANDIDATE_FILE: &str =
     "LKH finished but candidate file was not created (unexpected).";
 const ERR_NO_RESULTS: &str = "No results";
+const ERR_INVALID_POINT: &str = "Input contains invalid lat/lng values";
+const ERR_INVALID_PROJECTION_RADIUS: &str = "projection_radius must be > 0";
 
 pub(crate) struct LkhSolver {
     executable: PathBuf,
@@ -44,9 +44,9 @@ pub(crate) struct LkhSolver {
 
 impl LkhSolver {
     pub(crate) fn new(executable: PathBuf, work_dir: PathBuf) -> Self {
-        let problem_file = work_dir.join(PROBLEM_FILE_TSP);
-        let candidate_file = work_dir.join(PROBLEM_FILE_CANDIDATE);
-        let pi_file = work_dir.join(PROBLEM_FILE_PI);
+        let problem_file = work_dir.join(PROBLEM_FILE.tsp_file());
+        let candidate_file = work_dir.join(PROBLEM_FILE.candidate_file());
+        let pi_file = work_dir.join(PROBLEM_FILE.pi_file());
 
         Self {
             executable,
@@ -88,12 +88,12 @@ PI_FILE = {}
 
     /// Write TSPLIB EUC_2D problem using projected XY.
     pub(crate) fn create_problem_file(&self, points: &[Coord]) -> io::Result<()> {
-        TsplibProblemWriter::write_euc2d(&self.problem_file, PROBLEM_NAME, points)
+        TsplibProblemWriter::write_euc2d(&self.problem_file, PROBLEM_FILE.name(), points)
     }
 
     pub(crate) fn ensure_candidate_file(&self, n: usize) -> io::Result<()> {
-        let prep_par = self.work_dir.join(PREP_CANDIDATES_PAR_FILE);
-        let prep_tour = self.work_dir.join(PREP_CANDIDATES_TOUR_FILE);
+        let prep_par = self.work_dir.join(PREP_CANDIDATES_FILE.par_file());
+        let prep_tour = self.work_dir.join(PREP_CANDIDATES_FILE.tour_file());
 
         let rs = RunSpec::new(PREP_RUN_INDEX, PREP_SEED, prep_par.clone(), prep_tour);
 
@@ -130,17 +130,16 @@ fn rm_file(pb: &Path) {
     if !pb.exists() {
         return;
     }
-    if let Err(err) = fs::remove_file(pb) {
-        eprintln!("Unable to remove file {}: {}", pb.display(), err);
-    }
+    let _ = fs::remove_file(pb);
 }
 
 /// Solve TSP by spawning multiple LKH processes in parallel with different SEEDs.
 /// Returns best tour points.
-pub fn solve_tsp_with_lkh_parallel(
+pub(crate) fn solve_tsp_with_lkh_parallel_with_options(
     lkh_exe: PathBuf,
     work_dir: PathBuf,
     input: &[Point],
+    options: &SolverOptions,
 ) -> io::Result<Vec<Point>> {
     if input.len() < MIN_CYCLE_POINTS {
         return Err(io::Error::new(
@@ -148,23 +147,39 @@ pub fn solve_tsp_with_lkh_parallel(
             format!("Need at least {MIN_CYCLE_POINTS} points for a cycle"),
         ));
     }
+    if options.projection_radius <= 0.0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            ERR_INVALID_PROJECTION_RADIUS,
+        ));
+    }
+    if input.iter().any(|p| !p.is_valid()) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            ERR_INVALID_POINT,
+        ));
+    }
 
     let cfg = LkhConfig::new(input.len());
     let solver = LkhSolver::new(lkh_exe, work_dir);
     solver.create_work_dir()?;
 
-    let points = Plane::new(input).radius(PLANE_PROJECTION_RADIUS).project();
+    let points = PlaneProjection::new(input)
+        .radius(options.projection_radius)
+        .project();
 
     solver.create_problem_file(&points)?;
     solver.ensure_candidate_file(points.len())?;
 
     let parallelism = LkhSolver::threads();
 
-    eprintln!(
-        "Starting LKH for {} points and will run for {}s across {parallelism} threads",
-        input.len(),
-        cfg.time_limit(),
-    );
+    if options.verbose {
+        eprintln!(
+            "Starting LKH for {} points and will run for {}s across {parallelism} threads",
+            input.len(),
+            cfg.time_limit(),
+        );
+    }
 
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(parallelism)
@@ -179,13 +194,15 @@ pub fn solve_tsp_with_lkh_parallel(
                 let rs = RunSpec::new(
                     idx,
                     seed,
-                    solver.work_dir().join(run_par_file(idx)),
-                    solver.work_dir().join(run_tour_file(idx)),
+                    solver.work_dir().join(RUN_FILE.par_file_with_idx(idx)),
+                    solver.work_dir().join(RUN_FILE.tour_file_with_idx(idx)),
                 );
                 rs.write_lkh_par(&cfg, &solver)?;
 
                 let now = Instant::now();
-                eprintln!("Starting tour for thread {idx}");
+                if options.verbose {
+                    eprintln!("Starting tour for thread {idx}");
+                }
 
                 let out = solver.run(rs.par_path())?;
 
@@ -197,10 +214,12 @@ pub fn solve_tsp_with_lkh_parallel(
                 let tour = rs.parse_tsplib_tour(points.len())?;
                 let len = TourGeometry::tour_length(&points, &tour);
 
-                eprintln!(
-                    "Finished tour for thread {idx} - took {:.2}s: {len:.0}m",
-                    now.elapsed().as_secs_f32()
-                );
+                if options.verbose {
+                    eprintln!(
+                        "Finished tour for thread {idx} - took {:.2}s: {len:.0}m",
+                        now.elapsed().as_secs_f32()
+                    );
+                }
                 Ok((tour, len))
             })
             .collect::<io::Result<Vec<_>>>()

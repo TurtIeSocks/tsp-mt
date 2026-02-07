@@ -10,7 +10,6 @@ const LARGE_JUMP_DISTANCE_THRESHOLD: f64 = 1_000.0;
 const CANDIDATE_PAIR_CHECK_LIMIT: usize = 40;
 const MIN_TOUR_SIZE_FOR_2OPT: usize = 4;
 const TWO_OPT_IMPROVEMENT_EPSILON: f64 = 1e-5;
-const MERGE_EXPECT_NON_EMPTY_TOURS: &str = "tours must be non-empty and candidates found";
 
 struct MergeResult {
     merged: Vec<usize>,
@@ -43,6 +42,7 @@ impl TourStitcher {
         boundaries: &[usize],
         window: usize,
         passes: usize,
+        verbose: bool,
     ) {
         let now = std::time::Instant::now();
         let n = tour.len();
@@ -89,10 +89,12 @@ impl TourStitcher {
             }
         }
 
-        eprintln!(
-            "Boundary 2-opt finished in {:.2}s",
-            now.elapsed().as_secs_f32()
-        );
+        if verbose {
+            eprintln!(
+                "Boundary 2-opt finished in {:.2}s",
+                now.elapsed().as_secs_f32()
+            );
+        }
     }
 
     /// Merges two tours by finding the strictly closest points between them.
@@ -127,8 +129,12 @@ impl TourStitcher {
         let mut best: Option<(usize, usize, usize, usize, bool, f64)> = None;
 
         for &(_, u_node, v_node) in candidates.iter().take(check_limit) {
-            let u_idx = *pos_a.get(&u_node).unwrap();
-            let v_idx = *pos_b.get(&v_node).unwrap();
+            let Some(&u_idx) = pos_a.get(&u_node) else {
+                continue;
+            };
+            let Some(&v_idx) = pos_b.get(&v_node) else {
+                continue;
+            };
 
             let u_next_node = tour_a[(u_idx + 1) % n_a];
             let u_prev_node = tour_a[(u_idx + n_a - 1) % n_a];
@@ -180,8 +186,17 @@ impl TourStitcher {
             }
         }
 
-        let (_a_cut_u, a_cut_v, b_cut_u, b_cut_v, flip_b, _score) =
-            best.expect(MERGE_EXPECT_NON_EMPTY_TOURS);
+        let Some((_a_cut_u, a_cut_v, b_cut_u, b_cut_v, flip_b, _score)) = best else {
+            let mut merged = Vec::with_capacity(tour_a.len() + tour_b.len());
+            merged.extend_from_slice(tour_a);
+            merged.extend_from_slice(tour_b);
+            let boundary_mid = tour_a.len().saturating_sub(1);
+            let boundary_end = merged.len().saturating_sub(1);
+            return MergeResult {
+                merged,
+                boundaries: [boundary_mid, boundary_end],
+            };
+        };
 
         let a_lin = TourGeometry::rotate_cycle(tour_a, a_cut_v);
 

@@ -1,12 +1,12 @@
 use std::{env, time::Instant};
 
-mod lkh;
 // mod outliers;
 // mod processing;
-mod project;
 // mod stats;
 // mod tsp;
 mod utils;
+
+use tsp_mt::lkh;
 
 fn main() -> std::io::Result<()> {
     let now = Instant::now();
@@ -24,7 +24,15 @@ fn main() -> std::io::Result<()> {
 
     eprintln!("Workdir: {:?} | LKH: {lkh:?}", &work_dir);
 
-    let route = lkh::solve_tsp_with_lkh_h3_chunked(lkh, work_dir, &points)?;
+    let input: Vec<lkh::Point> = points
+        .iter()
+        .map(|p| lkh::Point {
+            lat: p.lat,
+            lng: p.lng,
+        })
+        .collect();
+
+    let route = lkh::solve_tsp_with_lkh_h3_chunked(lkh, work_dir, &input)?;
     // let path = format!("{}", path.to_str().unwrap_or_default());
 
     // let args = parse_args();
@@ -47,7 +55,14 @@ fn main() -> std::io::Result<()> {
     eprintln!("Output length: {}", route.len());
     eprintln!("Time: {:.2}s", now.elapsed().as_secs_f32());
 
-    utils::measure_distance_open(&route);
+    let route_for_metrics: Vec<utils::Point> = route
+        .iter()
+        .map(|p| utils::Point {
+            lat: p.lat,
+            lng: p.lng,
+        })
+        .collect();
+    utils::measure_distance_open(&route_for_metrics);
     // run_single(&path, &points);
 
     Ok(())

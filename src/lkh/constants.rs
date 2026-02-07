@@ -1,34 +1,53 @@
-pub(crate) const PROBLEM_FILE_TSP: &str = "problem.tsp";
-pub(crate) const PROBLEM_FILE_CANDIDATE: &str = "problem.cand";
-pub(crate) const PROBLEM_FILE_PI: &str = "problem.pi";
-pub(crate) const PROBLEM_NAME: &str = "problem";
-
 pub(crate) const MIN_CYCLE_POINTS: usize = 3;
-pub(crate) const PLANE_PROJECTION_RADIUS: f64 = 70.0;
 
-pub(crate) const THREAD_FALLBACK_PARALLELISM: usize = 2;
-pub(crate) const THREAD_MIN_PARALLELISM: usize = 2;
-pub(crate) const THREAD_RESERVED_CORES: usize = 1;
+pub(crate) const PAR_EXTENSION: &str = ".par";
+pub(crate) const TOUR_EXTENSION: &str = ".tour";
+pub(crate) const TSP_EXTENSION: &str = ".tsp";
+pub(crate) const CANDIDATE_EXTENSION: &str = ".cand";
+pub(crate) const PI_EXTENSION: &str = ".pi";
 
-pub(crate) const PREP_CANDIDATES_PAR_FILE: &str = "prep_candidates.par";
-pub(crate) const PREP_CANDIDATES_TOUR_FILE: &str = "prep_candidates.tour";
-
-pub(crate) const RUN_FILE_PREFIX: &str = "run_";
-pub(crate) const RUN_PAR_EXTENSION: &str = ".par";
-pub(crate) const RUN_TOUR_EXTENSION: &str = ".tour";
-
-pub(crate) const CENTROIDS_TSP_FILE: &str = "centroids.tsp";
-pub(crate) const CENTROIDS_PAR_FILE: &str = "centroids.par";
-pub(crate) const CENTROIDS_TOUR_FILE: &str = "centroids.tour";
-pub(crate) const CENTROIDS_NAME: &str = "centroids";
-
-pub(crate) const CHUNK_DIR_PREFIX: &str = "chunk_";
-pub(crate) const CHUNK_ORDER_DIR: &str = "chunk_order";
-
-pub(crate) fn run_par_file(idx: usize) -> String {
-    format!("{RUN_FILE_PREFIX}{idx}{RUN_PAR_EXTENSION}")
+pub(crate) struct File {
+    name: &'static str,
 }
 
-pub(crate) fn run_tour_file(idx: usize) -> String {
-    format!("{RUN_FILE_PREFIX}{idx}{RUN_TOUR_EXTENSION}")
+impl File {
+    const fn new(name: &'static str) -> Self {
+        Self { name }
+    }
+    fn file_name(&self, ext: &'static str) -> String {
+        format!("{}{ext}", self.name)
+    }
+    fn idx_file_name(&self, idx: usize, ext: &'static str) -> String {
+        format!("{}_{idx}{ext}", self.name)
+    }
+
+    pub fn par_file(&self) -> String {
+        self.file_name(PAR_EXTENSION)
+    }
+    pub fn par_file_with_idx(&self, idx: usize) -> String {
+        self.idx_file_name(idx, PAR_EXTENSION)
+    }
+    pub fn tour_file(&self) -> String {
+        self.file_name(TOUR_EXTENSION)
+    }
+    pub fn tour_file_with_idx(&self, idx: usize) -> String {
+        self.idx_file_name(idx, TOUR_EXTENSION)
+    }
+    pub fn candidate_file(&self) -> String {
+        self.file_name(CANDIDATE_EXTENSION)
+    }
+    pub fn pi_file(&self) -> String {
+        self.file_name(PI_EXTENSION)
+    }
+    pub fn tsp_file(&self) -> String {
+        self.file_name(TSP_EXTENSION)
+    }
+    pub const fn name(&self) -> &'static str {
+        self.name
+    }
 }
+
+pub(crate) const PROBLEM_FILE: File = File::new("problem");
+pub(crate) const PREP_CANDIDATES_FILE: File = File::new("prep_candidates");
+pub(crate) const RUN_FILE: File = File::new("run");
+pub(crate) const CENTROIDS_FILE: File = File::new("centroids");

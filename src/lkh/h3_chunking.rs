@@ -1,23 +1,27 @@
 use std::collections::HashMap;
+use std::io;
 
 use h3o::{CellIndex, LatLng, Resolution};
 
-use crate::utils::Point;
+use crate::lkh::point::Point;
 
 const INITIAL_RESOLUTION: Resolution = Resolution::Four;
 const MAX_RESOLUTION: Resolution = Resolution::Fifteen;
-const VALID_LAT_LNG_EXPECT: &str = "valid lat/lng";
+const ERR_INVALID_LAT_LNG: &str = "invalid lat/lng for H3";
 
 pub(crate) struct H3Chunker;
 
 impl H3Chunker {
-    pub(crate) fn partition_indices(input: &[Point], max_bucket_sz: usize) -> Vec<Vec<usize>> {
+    pub(crate) fn partition_indices(
+        input: &[Point],
+        max_bucket_sz: usize,
+    ) -> io::Result<Vec<Vec<usize>>> {
         let mut res = INITIAL_RESOLUTION;
-        let mut buckets = Self::bucket_by_res(input, res, None);
+        let mut buckets = Self::bucket_by_res(input, res, None)?;
 
         while Self::max_bucket(&buckets) > max_bucket_sz && res != MAX_RESOLUTION {
             res = Self::next_resolution(res);
-            buckets = Self::bucket_by_res(input, res, None);
+            buckets = Self::bucket_by_res(input, res, None)?;
         }
 
         let mut out: Vec<Vec<usize>> = Vec::new();
@@ -40,7 +44,7 @@ impl H3Chunker {
                         next_frontier.push(b);
                         continue;
                     }
-                    let sub = Self::bucket_by_res(input, local_res, Some(&b));
+                    let sub = Self::bucket_by_res(input, local_res, Some(&b))?;
                     for v in sub.into_values() {
                         next_frontier.push(v);
                     }
@@ -60,7 +64,7 @@ impl H3Chunker {
             }
         }
 
-        out
+        Ok(out)
     }
 
     fn next_resolution(r: Resolution) -> Resolution {
@@ -89,27 +93,29 @@ impl H3Chunker {
         input: &[Point],
         res: Resolution,
         subset: Option<&[usize]>,
-    ) -> HashMap<CellIndex, Vec<usize>> {
+    ) -> io::Result<HashMap<CellIndex, Vec<usize>>> {
         let mut map: HashMap<CellIndex, Vec<usize>> = HashMap::new();
 
-        let mut add_index = |i: usize| {
+        let mut add_index = |i: usize| -> io::Result<()> {
             let p = &input[i];
-            let ll = LatLng::new(p.lat, p.lng).expect(VALID_LAT_LNG_EXPECT);
+            let ll = LatLng::new(p.lat, p.lng)
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, ERR_INVALID_LAT_LNG))?;
             let cell = ll.to_cell(res);
             map.entry(cell).or_default().push(i);
+            Ok(())
         };
 
         if let Some(idxs) = subset {
             for &i in idxs {
-                add_index(i);
+                add_index(i)?;
             }
         } else {
             for i in 0..input.len() {
-                add_index(i);
+                add_index(i)?;
             }
         }
 
-        map
+        Ok(map)
     }
 
     fn max_bucket(map: &HashMap<CellIndex, Vec<usize>>) -> usize {
