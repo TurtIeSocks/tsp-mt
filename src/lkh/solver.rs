@@ -44,9 +44,9 @@ pub(crate) struct LkhSolver {
 
 impl LkhSolver {
     pub(crate) fn new(executable: PathBuf, work_dir: PathBuf) -> Self {
-        let problem_file = work_dir.join(PROBLEM_FILE.tsp_file());
-        let candidate_file = work_dir.join(PROBLEM_FILE.candidate_file());
-        let pi_file = work_dir.join(PROBLEM_FILE.pi_file());
+        let problem_file = work_dir.join(PROBLEM_FILE.tsp());
+        let candidate_file = work_dir.join(PROBLEM_FILE.candidate());
+        let pi_file = work_dir.join(PROBLEM_FILE.pi());
 
         Self {
             executable,
@@ -92,8 +92,8 @@ PI_FILE = {}
     }
 
     pub(crate) fn ensure_candidate_file(&self, n: usize) -> io::Result<()> {
-        let prep_par = self.work_dir.join(PREP_CANDIDATES_FILE.par_file());
-        let prep_tour = self.work_dir.join(PREP_CANDIDATES_FILE.tour_file());
+        let prep_par = self.work_dir.join(PREP_CANDIDATES_FILE.par());
+        let prep_tour = self.work_dir.join(PREP_CANDIDATES_FILE.tour());
 
         let rs = RunSpec::new(PREP_RUN_INDEX, PREP_SEED, prep_par.clone(), prep_tour);
 
@@ -194,8 +194,8 @@ pub(crate) fn solve_tsp_with_lkh_parallel_with_options(
                 let rs = RunSpec::new(
                     idx,
                     seed,
-                    solver.work_dir().join(RUN_FILE.par_file_with_idx(idx)),
-                    solver.work_dir().join(RUN_FILE.tour_file_with_idx(idx)),
+                    solver.work_dir().join(RUN_FILE.par_idx(idx)),
+                    solver.work_dir().join(RUN_FILE.tour_idx(idx)),
                 );
                 rs.write_lkh_par(&cfg, &solver)?;
 

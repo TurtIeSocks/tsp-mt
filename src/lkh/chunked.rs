@@ -68,10 +68,10 @@ impl ChunkSolver {
             cfg.base_seed(),
             solver
                 .work_dir()
-                .join(RUN_FILE.par_file_with_idx(RUN_INDEX_SINGLE)),
+                .join(RUN_FILE.par_idx(RUN_INDEX_SINGLE)),
             solver
                 .work_dir()
-                .join(RUN_FILE.tour_file_with_idx(RUN_INDEX_SINGLE)),
+                .join(RUN_FILE.tour_idx(RUN_INDEX_SINGLE)),
         );
         rs.write_lkh_par(&cfg, &solver)?;
 
@@ -93,14 +93,14 @@ impl ChunkSolver {
 
         fs::create_dir_all(work_dir)?;
 
-        let problem = work_dir.join(CENTROIDS_FILE.tsp_file());
+        let problem = work_dir.join(CENTROIDS_FILE.tsp());
         TsplibProblemWriter::write_euc2d(&problem, CENTROIDS_FILE.name(), centroids)?;
 
         let rs = RunSpec::new(
             RUN_INDEX_SINGLE,
             options.centroid_order_seed,
-            work_dir.join(CENTROIDS_FILE.par_file()),
-            work_dir.join(CENTROIDS_FILE.tour_file()),
+            work_dir.join(CENTROIDS_FILE.par()),
+            work_dir.join(CENTROIDS_FILE.tour()),
         );
         rs.write_lkh_par_small(
             &problem,

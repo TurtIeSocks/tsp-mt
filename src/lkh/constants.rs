@@ -21,25 +21,25 @@ impl File {
         format!("{}_{idx}{ext}", self.name)
     }
 
-    pub fn par_file(&self) -> String {
+    pub fn par(&self) -> String {
         self.file_name(PAR_EXTENSION)
     }
-    pub fn par_file_with_idx(&self, idx: usize) -> String {
+    pub fn par_idx(&self, idx: usize) -> String {
         self.idx_file_name(idx, PAR_EXTENSION)
     }
-    pub fn tour_file(&self) -> String {
+    pub fn tour(&self) -> String {
         self.file_name(TOUR_EXTENSION)
     }
-    pub fn tour_file_with_idx(&self, idx: usize) -> String {
+    pub fn tour_idx(&self, idx: usize) -> String {
         self.idx_file_name(idx, TOUR_EXTENSION)
     }
-    pub fn candidate_file(&self) -> String {
+    pub fn candidate(&self) -> String {
         self.file_name(CANDIDATE_EXTENSION)
     }
-    pub fn pi_file(&self) -> String {
+    pub fn pi(&self) -> String {
         self.file_name(PI_EXTENSION)
     }
-    pub fn tsp_file(&self) -> String {
+    pub fn tsp(&self) -> String {
         self.file_name(TSP_EXTENSION)
     }
     pub const fn name(&self) -> &'static str {
