@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{fs::File, io::Write};
 
 use env_logger::{Builder, Target, fmt::Formatter};
 use log::Level;
@@ -14,7 +14,6 @@ pub fn init_logger(options: &SolverOptions) -> Result<()> {
     builder
         .filter_level(options.log_level.to_filter())
         .write_style(env_logger::WriteStyle::Never)
-        .target(Target::Stderr)
         .format(move |buf: &mut Formatter, record| {
             if log_timestamp {
                 write!(buf, "{} ", buf.timestamp_millis())?;
@@ -35,6 +34,18 @@ pub fn init_logger(options: &SolverOptions) -> Result<()> {
                 }
             }
         });
+
+    if let Some(log_path) = options.log_output_path() {
+        let log_file = File::create(log_path).map_err(|e| {
+            crate::Error::other(format!(
+                "failed to create log output file {}: {e}",
+                log_path.display()
+            ))
+        })?;
+        builder.target(Target::Pipe(Box::new(log_file)));
+    } else {
+        builder.target(Target::Stderr);
+    }
 
     builder
         .try_init()

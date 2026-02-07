@@ -37,6 +37,9 @@ pub struct SolverOptions {
     pub log_format: LogFormat,
     /// Include timestamps in log lines.
     pub log_timestamp: bool,
+    /// Optional output file path for logs and metrics. Empty means stderr.
+    #[cli(long = "log-output")]
+    pub log_output: String,
     /// Optional output file path for ordered route points. Empty means stdout.
     #[cli(long = "output")]
     pub output: String,
@@ -87,6 +90,7 @@ impl Default for SolverOptions {
             log_level: LogLevel::Warn,
             log_format: LogFormat::Compact,
             log_timestamp: true,
+            log_output: String::new(),
             output: String::new(),
         }
     }
@@ -184,14 +188,25 @@ impl SolverOptions {
             "  --log-format <compact|pretty>\n",
             "  --log-timestamp[=<bool>]\n",
             "  --no-log-timestamp\n",
+            "  --log-output <path>\n",
             "  --output <path>\n",
             "  --help\n",
             "\n",
             "Examples:\n",
             "  tsp-mt --max-chunk-size 2000 --log-level warn --output output.txt < points.txt\n",
+            "  tsp-mt --log-level=info --log-output run.log < points.txt\n",
             "  tsp-mt --log-level=debug --log-format=pretty --log-timestamp < points.txt\n",
             "  tsp-mt --projection-radius=100 --log-level=info < points.txt\n",
         )
+    }
+
+    pub fn log_output_path(&self) -> Option<&Path> {
+        let log_output = self.log_output.trim();
+        if log_output.is_empty() || log_output == "-" {
+            None
+        } else {
+            Some(Path::new(log_output))
+        }
     }
 
     pub fn output_path(&self) -> Option<&Path> {
@@ -268,6 +283,7 @@ mod tests {
             "--log-level=debug",
             "--log-format=pretty",
             "--log-timestamp=false",
+            "--log-output=run.log",
             "--output=route.txt",
         ])
         .expect("parse options");
@@ -282,6 +298,7 @@ mod tests {
         assert_eq!(options.log_level, LogLevel::Debug);
         assert_eq!(options.log_format, LogFormat::Pretty);
         assert!(!options.log_timestamp);
+        assert_eq!(options.log_output, "run.log");
         assert_eq!(options.output, "route.txt");
     }
 
@@ -350,6 +367,26 @@ mod tests {
         assert_eq!(
             options.output_path().expect("path should exist"),
             std::path::Path::new("out/route.txt")
+        );
+    }
+
+    #[test]
+    fn log_output_path_treats_empty_and_dash_as_stderr() {
+        let options = SolverOptions::default();
+        assert!(options.log_output_path().is_none());
+
+        let mut options = SolverOptions::default();
+        options.log_output = "-".to_string();
+        assert!(options.log_output_path().is_none());
+    }
+
+    #[test]
+    fn log_output_path_returns_path_for_non_empty_value() {
+        let mut options = SolverOptions::default();
+        options.log_output = "out/run.log".to_string();
+        assert_eq!(
+            options.log_output_path().expect("path should exist"),
+            std::path::Path::new("out/run.log")
         );
     }
 }

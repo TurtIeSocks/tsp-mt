@@ -7,7 +7,7 @@ High-performance TSP solver for geographic coordinates (`lat,lng`) using LKH, pa
 - Reads points from `stdin`
 - Solves a route order
 - Writes ordered points to `stdout` (one `lat,lng` per line) or `--output <path>`
-- Writes logs/metrics to `stderr`
+- Writes logs/metrics to `stderr` (default) or `--log-output <path>`
 
 ## Prerequisites
 
@@ -93,7 +93,8 @@ Example valid input:
 
 - `stdout`: ordered route, one `lat,lng` per line (default)
 - `--output <path>`: ordered route written to the specified file
-- `stderr`: progress, timing, and distance metrics
+- `stderr`: progress, timing, and distance metrics (default)
+- `--log-output <path>`: logs/metrics written to the specified file instead of stderr
 
 ## Run
 
@@ -113,6 +114,12 @@ or to save output to file:
 
 ```bash
 target/release/tsp-mt [args] --output output.txt < points.txt
+```
+
+or to save logs to file:
+
+```bash
+target/release/tsp-mt [args] --log-output run.log < points.txt
 ```
 
 ## CLI Arguments
@@ -136,6 +143,7 @@ Both `--flag value` and `--flag=value` work.
 | `--log-format <value>`                | enum               |       `compact` | One of: `compact`, `pretty`                                                       |
 | `--log-timestamp[=<bool>]`            | bool (optional val) |          `true` | If provided without value, sets to `true`                                         |
 | `--no-log-timestamp`                  | flag               |            `n/a` | Forces `log_timestamp=false`                                                      |
+| `--log-output <path>`                 | path               |       `stderr` | Write logs/metrics to this file instead of stderr                                 |
 | `--help`, `-h`                        | flag               |            `n/a` | Prints usage and exits                                                            |
 
 Accepted boolean values for `--log-timestamp=<bool>`:  
