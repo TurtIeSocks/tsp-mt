@@ -1,11 +1,6 @@
 use std::{env, time::Instant};
 
-use tsp_mt::{LKHNode, SolverInput, SolverOptions, solve_tsp_with_lkh_h3_chunked, utils};
-
-// mod outliers;
-// mod processing;
-// mod stats;
-// mod tsp;
+use tsp_mt::{SolverInput, SolverOptions, solve_tsp_with_lkh_h3_chunked, utils};
 
 fn main() -> std::io::Result<()> {
     let now = Instant::now();
@@ -23,13 +18,8 @@ fn main() -> std::io::Result<()> {
 
     eprintln!("Workdir: {:?} | LKH: {lkh:?}", &work_dir);
 
-    let input: Vec<LKHNode> = points
-        .iter()
-        .map(|p| LKHNode::new(p.lat, p.lng))
-        .collect();
-
     let route = solve_tsp_with_lkh_h3_chunked(
-        SolverInput::new(&lkh, &work_dir, &input),
+        SolverInput::new(&lkh, &work_dir, &points),
         SolverOptions::default(),
     )?;
     // let path = format!("{}", path.to_str().unwrap_or_default());
@@ -54,11 +44,7 @@ fn main() -> std::io::Result<()> {
     eprintln!("Output length: {}", route.len());
     eprintln!("Time: {:.2}s", now.elapsed().as_secs_f32());
 
-    let route_for_metrics: Vec<utils::Point> = route
-        .iter()
-        .map(|p| utils::Point { lat: p.y, lng: p.x })
-        .collect();
-    utils::measure_distance_open(&route_for_metrics);
+    utils::measure_distance_open(&route);
     // run_single(&path, &points);
 
     Ok(())

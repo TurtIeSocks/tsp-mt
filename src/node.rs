@@ -1,5 +1,7 @@
 use std::fmt;
 
+const R: f64 = 6_371_000.0;
+
 /// LKH point representation.
 /// For geographic input, `x=lng` and `y=lat` in degrees.
 /// For projected internal coordinates, `x/y` are planar values.
@@ -30,6 +32,17 @@ impl LKHNode {
             && self.x.is_finite()
             && (-90.0..=90.0).contains(&self.y)
             && (-180.0..=180.0).contains(&self.x)
+    }
+
+    pub fn dist(self, rhs: &Self) -> f64 {
+        // Haversine meters
+        let (lat1, lat2) = (self.y.to_radians(), rhs.y.to_radians());
+        let dlat = (rhs.y - self.y).to_radians();
+        let dlng = (rhs.x - self.x).to_radians();
+        let s1 = (dlat / 2.0).sin();
+        let s2 = (dlng / 2.0).sin();
+        let h = s1 * s1 + lat1.cos() * lat2.cos() * s2 * s2;
+        2.0 * R * h.sqrt().asin()
     }
 }
 
