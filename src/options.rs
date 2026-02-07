@@ -1,5 +1,7 @@
 use std::{env, io};
 
+use log::LevelFilter;
+
 /// Runtime options for LKH solving behavior.
 #[derive(Clone, Debug)]
 pub struct SolverOptions {
@@ -17,8 +19,71 @@ pub struct SolverOptions {
     pub boundary_2opt_window: usize,
     /// Number of passes for boundary-local 2-opt refinement.
     pub boundary_2opt_passes: usize,
-    /// Emit progress logs to stderr when true.
-    pub verbose: bool,
+    /// Structured logging level.
+    pub log_level: LogLevel,
+    /// Logging output format.
+    pub log_format: LogFormat,
+    /// Include timestamps in log lines.
+    pub log_timestamp: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+    Off,
+}
+
+impl LogLevel {
+    fn parse(raw: &str) -> io::Result<Self> {
+        match raw.to_ascii_lowercase().as_str() {
+            "error" => Ok(Self::Error),
+            "warn" | "warning" => Ok(Self::Warn),
+            "info" => Ok(Self::Info),
+            "debug" => Ok(Self::Debug),
+            "trace" => Ok(Self::Trace),
+            "off" => Ok(Self::Off),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "Invalid value for --log-level: {raw} (expected error|warn|info|debug|trace|off)"
+                ),
+            )),
+        }
+    }
+
+    pub fn to_filter(self) -> LevelFilter {
+        match self {
+            Self::Error => LevelFilter::Error,
+            Self::Warn => LevelFilter::Warn,
+            Self::Info => LevelFilter::Info,
+            Self::Debug => LevelFilter::Debug,
+            Self::Trace => LevelFilter::Trace,
+            Self::Off => LevelFilter::Off,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LogFormat {
+    Compact,
+    Pretty,
+}
+
+impl LogFormat {
+    fn parse(raw: &str) -> io::Result<Self> {
+        match raw.to_ascii_lowercase().as_str() {
+            "compact" => Ok(Self::Compact),
+            "pretty" => Ok(Self::Pretty),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Invalid value for --log-format: {raw} (expected compact|pretty)"),
+            )),
+        }
+    }
 }
 
 impl Default for SolverOptions {
@@ -31,7 +96,9 @@ impl Default for SolverOptions {
             centroid_order_time_limit: 10,
             boundary_2opt_window: 500,
             boundary_2opt_passes: 50,
-            verbose: true,
+            log_level: LogLevel::Warn,
+            log_format: LogFormat::Compact,
+            log_timestamp: true,
         }
     }
 }
@@ -87,20 +154,38 @@ impl SolverOptions {
                 "boundary-2opt-passes" => {
                     options.boundary_2opt_passes = parse_value::<usize>(&name, value)?;
                 }
-                "verbose" => {
-                    options.verbose = match value {
+                "log-level" => {
+                    let raw = value.ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("Missing value for --{name}"),
+                        )
+                    })?;
+                    options.log_level = LogLevel::parse(&raw)?;
+                }
+                "log-format" => {
+                    let raw = value.ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("Missing value for --{name}"),
+                        )
+                    })?;
+                    options.log_format = LogFormat::parse(&raw)?;
+                }
+                "log-timestamp" => {
+                    options.log_timestamp = match value {
                         Some(v) => parse_bool(&name, &v)?,
                         None => true,
                     };
                 }
-                "no-verbose" => {
+                "no-log-timestamp" => {
                     if value.is_some() {
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidInput,
                             format!("Flag --{name} does not take a value"),
                         ));
                     }
-                    options.verbose = false;
+                    options.log_timestamp = false;
                 }
                 // Handled by SolverInput::from_args; accepted here to allow dual parsing.
                 "lkh-exe" | "work-dir" => {
@@ -137,13 +222,20 @@ impl SolverOptions {
             "  --centroid-order-time-limit <usize>\n",
             "  --boundary-2opt-window <usize>\n",
             "  --boundary-2opt-passes <usize>\n",
-            "  --verbose[=<bool>]\n",
-            "  --no-verbose\n",
+            "  --log-level <error|warn|info|debug|trace|off>\n",
+            "  --log-target <stderr|stdout>\n",
+            "  --log-format <compact|pretty>\n",
+            "  --log-timestamp[=<bool>]\n",
+            "  --no-log-timestamp\n",
+            "  --quiet\n",
+            "  --verbose[=<bool>] (deprecated alias for --log-level info/warn)\n",
+            "  --no-verbose (deprecated alias for --log-level warn)\n",
             "  --help\n",
             "\n",
             "Examples:\n",
-            "  tsp-mt --max-chunk-size 2000 --no-verbose < points.txt\n",
-            "  tsp-mt --projection-radius=100 --verbose=false < points.txt\n",
+            "  tsp-mt --max-chunk-size 2000 --quiet < points.txt\n",
+            "  tsp-mt --log-level=debug --log-format=pretty --log-timestamp < points.txt\n",
+            "  tsp-mt --projection-radius=100 --log-target=stderr < points.txt\n",
         )
     }
 }

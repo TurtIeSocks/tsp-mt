@@ -8,6 +8,7 @@ mod embedded_lkh;
 mod geometry;
 mod h3_chunking;
 mod input;
+pub mod logging;
 mod node;
 mod options;
 mod problem;

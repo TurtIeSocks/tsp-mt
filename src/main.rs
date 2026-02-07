@@ -1,16 +1,17 @@
 use std::time::Instant;
 
-use tsp_mt::{SolverInput, SolverOptions, solve_tsp_with_lkh_h3_chunked, utils};
+use log::info;
+use tsp_mt::{SolverInput, SolverOptions, logging, solve_tsp_with_lkh_h3_chunked, utils};
 
 fn main() -> std::io::Result<()> {
     let now = Instant::now();
-    let input = SolverInput::from_args()?;
     let options = SolverOptions::from_args()?;
+    logging::init_logger(&options)?;
+    let input = SolverInput::from_args()?;
 
-    eprintln!("Input length: {}", input.points_len());
-    eprintln!();
+    info!("Input length: {}", input.points_len());
 
-    eprintln!(
+    info!(
         "Workdir: {:?} | LKH: {:?}",
         input.work_dir_path(),
         input.lkh_path()
@@ -22,8 +23,8 @@ fn main() -> std::io::Result<()> {
         println!("{point}");
     }
 
-    eprintln!("Output length: {}", route.len());
-    eprintln!("Time: {:.2}s", now.elapsed().as_secs_f32());
+    info!("Output length: {}", route.len());
+    info!("Time: {:.2}s", now.elapsed().as_secs_f32());
 
     utils::measure_distance_open(&route);
 

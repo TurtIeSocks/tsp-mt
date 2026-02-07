@@ -171,13 +171,11 @@ pub fn solve_tsp_with_lkh_parallel(
 
     let parallelism = LkhSolver::threads();
 
-    if options.verbose {
-        eprintln!(
-            "Starting LKH for {} points and will run for {}s across {parallelism} threads",
-            input.n(),
-            cfg.time_limit(),
-        );
-    }
+    log::info!(
+        "Starting LKH for {} points and will run for {}s across {parallelism} threads",
+        input.n(),
+        cfg.time_limit()
+    );
 
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(parallelism)
@@ -198,9 +196,7 @@ pub fn solve_tsp_with_lkh_parallel(
                 rs.write_lkh_par(&cfg, &solver)?;
 
                 let now = Instant::now();
-                if options.verbose {
-                    eprintln!("Starting tour for thread {idx}");
-                }
+                log::debug!("Starting tour for thread {idx}");
 
                 let out = solver.run(rs.par_path())?;
 
@@ -212,12 +208,10 @@ pub fn solve_tsp_with_lkh_parallel(
                 let tour = rs.parse_tsplib_tour(points.len())?;
                 let len = TourGeometry::tour_length(&points, &tour);
 
-                if options.verbose {
-                    eprintln!(
-                        "Finished tour for thread {idx} - took {:.2}s: {len:.0}m",
-                        now.elapsed().as_secs_f32()
-                    );
-                }
+                log::debug!(
+                    "Finished tour for thread {idx} - took {:.2}s: {len:.0}m",
+                    now.elapsed().as_secs_f32()
+                );
                 Ok((tour, len))
             })
             .collect::<io::Result<Vec<_>>>()

@@ -146,14 +146,12 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         .project();
 
     let chunks = H3Chunker::partition_indices(&input.points, options.max_chunk_size)?;
-    if options.verbose {
-        eprintln!(
-            "Chunked {} points into {} chunks (max {})",
-            input.n(),
-            chunks.len(),
-            options.max_chunk_size
-        );
-    }
+    log::info!(
+        "Chunked {} points into {} chunks (max {})",
+        input.n(),
+        chunks.len(),
+        options.max_chunk_size
+    );
 
     let solved_chunk_tours: Vec<Vec<usize>> = chunks
         .par_iter()
@@ -167,13 +165,11 @@ pub fn solve_tsp_with_lkh_h3_chunked(
                 ChunkSolver::solve_single(&input.lkh_exe, &chunk_dir, &chunk_points, &options)?;
             let tour_global: Vec<usize> = tour_local.into_iter().map(|li| idxs[li]).collect();
 
-            if options.verbose {
-                eprintln!(
-                    "chunk {chunk_id}: n={} solved in {:.2}s",
-                    idxs.len(),
-                    now.elapsed().as_secs_f32()
-                );
-            }
+            log::info!(
+                "chunk {chunk_id}: n={} solved in {:.2}s",
+                idxs.len(),
+                now.elapsed().as_secs_f32()
+            );
 
             Ok(tour_global)
         })
@@ -202,7 +198,6 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         &boundaries,
         options.boundary_2opt_window,
         options.boundary_2opt_passes,
-        options.verbose,
     );
 
     Ok(merged.into_iter().map(|i| input.get_point(i)).collect())

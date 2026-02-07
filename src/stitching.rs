@@ -41,7 +41,6 @@ impl TourStitcher {
         boundaries: &[usize],
         window: usize,
         passes: usize,
-        verbose: bool,
     ) {
         let now = std::time::Instant::now();
         let n = tour.len();
@@ -87,13 +86,10 @@ impl TourStitcher {
                 break;
             }
         }
-
-        if verbose {
-            eprintln!(
-                "Boundary 2-opt finished in {:.2}s",
-                now.elapsed().as_secs_f32()
-            );
-        }
+        log::info!(
+            "Boundary 2-opt finished in {:.2}s",
+            now.elapsed().as_secs_f32()
+        );
     }
 
     /// Merges two tours by finding the strictly closest points between them.
