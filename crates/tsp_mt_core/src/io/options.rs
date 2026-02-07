@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, path::Path};
 
 use log::LevelFilter;
 use tsp_mt_derive::{CliOptions, CliValue, KvDisplay};
@@ -37,6 +37,9 @@ pub struct SolverOptions {
     pub log_format: LogFormat,
     /// Include timestamps in log lines.
     pub log_timestamp: bool,
+    /// Optional output file path for ordered route points. Empty means stdout.
+    #[cli(long = "output")]
+    pub output: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, CliValue)]
@@ -84,6 +87,7 @@ impl Default for SolverOptions {
             log_level: LogLevel::Warn,
             log_format: LogFormat::Compact,
             log_timestamp: true,
+            output: String::new(),
         }
     }
 }
@@ -180,13 +184,23 @@ impl SolverOptions {
             "  --log-format <compact|pretty>\n",
             "  --log-timestamp[=<bool>]\n",
             "  --no-log-timestamp\n",
+            "  --output <path>\n",
             "  --help\n",
             "\n",
             "Examples:\n",
-            "  tsp-mt --max-chunk-size 2000 --log-level warn < points.txt > output.txt\n",
+            "  tsp-mt --max-chunk-size 2000 --log-level warn --output output.txt < points.txt\n",
             "  tsp-mt --log-level=debug --log-format=pretty --log-timestamp < points.txt\n",
             "  tsp-mt --projection-radius=100 --log-level=info < points.txt\n",
         )
+    }
+
+    pub fn output_path(&self) -> Option<&Path> {
+        let output = self.output.trim();
+        if output.is_empty() || output == "-" {
+            None
+        } else {
+            Some(Path::new(output))
+        }
     }
 }
 
@@ -254,6 +268,7 @@ mod tests {
             "--log-level=debug",
             "--log-format=pretty",
             "--log-timestamp=false",
+            "--output=route.txt",
         ])
         .expect("parse options");
 
@@ -267,6 +282,7 @@ mod tests {
         assert_eq!(options.log_level, LogLevel::Debug);
         assert_eq!(options.log_format, LogFormat::Pretty);
         assert!(!options.log_timestamp);
+        assert_eq!(options.output, "route.txt");
     }
 
     #[test]
@@ -312,7 +328,28 @@ mod tests {
 
     #[test]
     fn parse_from_iter_help_returns_usage_error() {
-        let err = SolverOptions::parse_from_iter(["--help"]).expect_err("help should short-circuit");
+        let err =
+            SolverOptions::parse_from_iter(["--help"]).expect_err("help should short-circuit");
         assert!(err.to_string().contains("Usage:"));
+    }
+
+    #[test]
+    fn output_path_treats_empty_and_dash_as_stdout() {
+        let options = SolverOptions::default();
+        assert!(options.output_path().is_none());
+
+        let mut options = SolverOptions::default();
+        options.output = "-".to_string();
+        assert!(options.output_path().is_none());
+    }
+
+    #[test]
+    fn output_path_returns_path_for_non_empty_value() {
+        let mut options = SolverOptions::default();
+        options.output = "out/route.txt".to_string();
+        assert_eq!(
+            options.output_path().expect("path should exist"),
+            std::path::Path::new("out/route.txt")
+        );
     }
 }

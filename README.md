@@ -6,7 +6,7 @@ High-performance TSP solver for geographic coordinates (`lat,lng`) using LKH, pa
 
 - Reads points from `stdin`
 - Solves a route order
-- Writes ordered points to `stdout` (one `lat,lng` per line)
+- Writes ordered points to `stdout` (one `lat,lng` per line) or `--output <path>`
 - Writes logs/metrics to `stderr`
 
 ## Prerequisites
@@ -91,7 +91,8 @@ Example valid input:
 
 ## Output Format
 
-- `stdout`: ordered route, one `lat,lng` per line
+- `stdout`: ordered route, one `lat,lng` per line (default)
+- `--output <path>`: ordered route written to the specified file
 - `stderr`: progress, timing, and distance metrics
 
 ## Run
@@ -111,7 +112,7 @@ target/release/tsp-mt [args] < points.txt
 or to save output to file:
 
 ```bash
-target/release/tsp-mt [args] < points.txt > output.txt
+target/release/tsp-mt [args] --output output.txt < points.txt
 ```
 
 ## CLI Arguments
@@ -123,6 +124,7 @@ Both `--flag value` and `--flag=value` work.
 | ------------------------------------- | ------------------ | ---------------: | --------------------------------------------------------------------------------- |
 | `--lkh-exe <path>`                    | path               |           `auto` | Use this LKH executable instead of extracted embedded one                         |
 | `--work-dir <path>`                   | path               | `<os-temp>/tsp-mt-<pid>` | Temp/output workspace for run artifacts                                       |
+| `--output <path>`                     | path               |       `stdout` | Write ordered route points to this file instead of stdout                      |
 | `--projection-radius <f64>`           | float              |           `70.0` | Must be `> 0`                                                                     |
 | `--max-chunk-size <usize>`            | int                |           `5000` | Must be `> 0`; above this input size, H3 chunked solver is used                  |
 | `--centroid-order-seed <u64>`         | int                |            `999` | Seed for chunk-centroid ordering run                                              |

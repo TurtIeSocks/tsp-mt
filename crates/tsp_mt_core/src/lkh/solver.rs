@@ -34,9 +34,9 @@ const ERR_NO_RESULTS: &str = "No results";
 const ERR_INVALID_POINT: &str = "Input contains invalid lat/lng values";
 const ERR_INVALID_PROJECTION_RADIUS: &str = "projection_radius must be > 0";
 
-pub(crate) struct LkhSolver{
+pub(crate) struct LkhSolver {
     executable: PathBuf,
-    work_dir:PathBuf,
+    work_dir: PathBuf,
     problem_file: PathBuf,
     candidate_file: PathBuf,
     pi_file: PathBuf,

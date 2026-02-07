@@ -148,7 +148,10 @@ mod tests {
 
     #[test]
     fn project_same_input_is_deterministic() {
-        let input = vec![LKHNode::new(48.8566, 2.3522), LKHNode::new(51.5074, -0.1278)];
+        let input = vec![
+            LKHNode::new(48.8566, 2.3522),
+            LKHNode::new(51.5074, -0.1278),
+        ];
 
         let a = PlaneProjection::new(&input).radius(100.0).project();
         let b = PlaneProjection::new(&input).radius(100.0).project();

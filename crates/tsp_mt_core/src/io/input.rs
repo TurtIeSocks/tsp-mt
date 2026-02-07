@@ -153,19 +153,12 @@ mod tests {
 
     #[test]
     fn parse_cli_args_reads_lkh_exe_and_work_dir() {
-        let (input, saw_lkh) = SolverInput::parse_cli_args([
-            "--lkh-exe",
-            "/bin/lkh",
-            "--work-dir",
-            "/tmp/work",
-        ])
-        .expect("parse args");
+        let (input, saw_lkh) =
+            SolverInput::parse_cli_args(["--lkh-exe", "/bin/lkh", "--work-dir", "/tmp/work"])
+                .expect("parse args");
 
         assert!(saw_lkh);
-        assert_eq!(
-            input.lkh_path().to_str().expect("utf8 path"),
-            "/bin/lkh"
-        );
+        assert_eq!(input.lkh_path().to_str().expect("utf8 path"), "/bin/lkh");
         assert_eq!(
             input.work_dir_path().to_str().expect("utf8 path"),
             "/tmp/work"

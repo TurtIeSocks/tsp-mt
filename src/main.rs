@@ -1,4 +1,9 @@
-use std::env;
+use std::{
+    env,
+    fs::File,
+    io::{Write, stdout},
+    path::PathBuf,
+};
 
 use log::info;
 
@@ -25,17 +30,31 @@ fn main() -> Result<()> {
 #[tsp_mt_derive::timer("main")]
 fn main_inner(options: SolverOptions) -> Result<()> {
     let input = SolverInput::from_args()?;
+    let output_path = options.output_path().map(PathBuf::from);
 
     info!("input: {input}");
     info!("options: {options}");
 
     let route = solve_tsp_with_lkh_h3_chunked(input, options)?;
-
-    for point in route.iter() {
-        println!("{point}");
-    }
+    write_route_output(&route, output_path.as_deref())?;
 
     utils::tour_distance(&route);
 
+    Ok(())
+}
+
+fn write_route_output(
+    route: &[tsp_mt_core::LKHNode],
+    output_path: Option<&std::path::Path>,
+) -> Result<()> {
+    let mut writer: Box<dyn Write> = match output_path {
+        Some(path) => Box::new(File::create(path)?),
+        None => Box::new(stdout()),
+    };
+
+    for point in route {
+        writeln!(writer, "{point}")?;
+    }
+    writer.flush()?;
     Ok(())
 }
