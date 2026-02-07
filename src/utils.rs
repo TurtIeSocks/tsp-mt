@@ -2,10 +2,10 @@ use crate::LKHNode;
 
 pub fn measure_distance_open(points: &[LKHNode]) -> (f64, f64, i32) {
     if points.len() < 2 {
-        log::info!("Total m: 0");
-        log::info!("Longest m: 0");
-        log::info!("Total Spikes: 0");
-        log::info!("");
+        log::info!(
+            "metrics.open_distance: n={} total_m=0 longest_m=0 avg_m=0 spike_threshold_m=0 spikes=0",
+            points.len()
+        );
         return (0.0, 0.0, 0);
     }
 
@@ -24,10 +24,6 @@ pub fn measure_distance_open(points: &[LKHNode]) -> (f64, f64, i32) {
     let avg_edge = total / ((points.len() - 1) as f64);
     let threshold = avg_edge * 10.0;
 
-    log::info!("Total dist: {total:.0}m");
-    log::info!("Longest dist: {longest:.0}m");
-    log::info!("Average: {avg_edge:.0}m");
-
     // Spike threshold: 10× average edge length (OPEN edges count = n-1)
     let mut spikes = 0;
     for i in 0..(points.len() - 1) {
@@ -41,7 +37,10 @@ pub fn measure_distance_open(points: &[LKHNode]) -> (f64, f64, i32) {
         // }
     }
 
-    log::info!("Total Over {threshold:.0}m: {spikes}");
+    log::info!(
+        "metrics.open_distance: n={} total_m={total:.0} longest_m={longest:.0} avg_m={avg_edge:.0} spike_threshold_m={threshold:.0} spikes={spikes}",
+        points.len()
+    );
 
     (total, longest, spikes)
 }

@@ -84,9 +84,14 @@ impl ChunkSolver {
         options: &SolverOptions,
     ) -> io::Result<Vec<usize>> {
         if centroids.len() <= MAX_CENTROIDS_WITH_TRIVIAL_ORDER {
+            log::debug!(
+                "chunked.order: skip_lkh centroids={} reason=trivial",
+                centroids.len()
+            );
             return Ok((0..centroids.len()).collect());
         }
 
+        log::debug!("chunked.order: start centroids={}", centroids.len());
         fs::create_dir_all(work_dir)?;
 
         let problem = work_dir.join(CENTROIDS_FILE.tsp());
@@ -110,6 +115,7 @@ impl ChunkSolver {
             .output()?;
         LkhProcess::ensure_success(ERR_CENTROID_ORDERING_FAILED, &out)?;
 
+        log::debug!("chunked.order: done centroids={}", centroids.len());
         rs.parse_tsplib_tour(centroids.len())
     }
 }
@@ -138,16 +144,22 @@ pub fn solve_tsp_with_lkh_h3_chunked(
     }
 
     if input.n() <= options.max_chunk_size {
+        log::info!(
+            "chunked: bypass n={} max_chunk_size={} mode=parallel",
+            input.n(),
+            options.max_chunk_size
+        );
         return super::solve_tsp_with_lkh_parallel(input, options);
     }
 
+    let total_now = Instant::now();
     let global_coords = PlaneProjection::new(&input.points)
         .radius(options.projection_radius)
         .project();
 
     let chunks = H3Chunker::partition_indices(&input.points, options.max_chunk_size)?;
     log::info!(
-        "Chunked {} points into {} chunks (max {})",
+        "chunked: partitioned n={} chunks={} max_chunk_size={}",
         input.n(),
         chunks.len(),
         options.max_chunk_size
@@ -166,7 +178,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
             let tour_global: Vec<usize> = tour_local.into_iter().map(|li| idxs[li]).collect();
 
             log::info!(
-                "chunk {chunk_id}: n={} solved in {:.2}s",
+                "chunked.chunk: done chunk_id={chunk_id} n={} secs={:.2}",
                 idxs.len(),
                 now.elapsed().as_secs_f32()
             );
@@ -180,6 +192,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         .map(|idxs| TourGeometry::centroid_of_indices(&global_coords, idxs))
         .collect();
 
+    log::info!("chunked: ordering centroids count={}", centroids.len());
     let order_dir = input.work_dir.join(CHUNK_ORDER_DIR);
     let order =
         ChunkSolver::order_by_centroid_tsp(&input.lkh_exe, &order_dir, &centroids, &options)?;
@@ -191,6 +204,11 @@ pub fn solve_tsp_with_lkh_h3_chunked(
 
     let (mut merged, boundaries) =
         TourStitcher::stitch_chunk_tours_dense(&global_coords, ordered_tours);
+    log::info!(
+        "chunked: stitched n={} boundaries={}",
+        merged.len(),
+        boundaries.len()
+    );
 
     TourStitcher::boundary_two_opt(
         &global_coords,
@@ -198,6 +216,12 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         &boundaries,
         options.boundary_2opt_window,
         options.boundary_2opt_passes,
+    );
+    log::info!(
+        "chunked: complete n={} chunks={} secs={:.2}",
+        merged.len(),
+        chunks.len(),
+        total_now.elapsed().as_secs_f32()
     );
 
     Ok(merged.into_iter().map(|i| input.get_point(i)).collect())

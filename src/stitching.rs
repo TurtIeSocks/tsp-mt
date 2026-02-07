@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Instant;
 
 use kiddo::{KdTree, SquaredEuclidean};
 
@@ -23,15 +24,33 @@ impl TourStitcher {
         coords: &[LKHNode],
         mut chunk_tours: Vec<Vec<usize>>,
     ) -> (Vec<usize>, Vec<usize>) {
+        let chunk_count = chunk_tours.len();
+        if chunk_count == 0 {
+            log::warn!("stitcher: no chunk tours to merge");
+            return (Vec::new(), Vec::new());
+        }
+
+        log::info!("stitcher: start merge chunk_tours={chunk_count}");
         let mut merged = chunk_tours.remove(0);
         let mut boundaries: Vec<usize> = Vec::new();
 
-        for t in chunk_tours {
+        for (merge_idx, t) in chunk_tours.into_iter().enumerate() {
             let res = Self::merge_two_cycles_dense(coords, &merged, &t);
             merged = res.merged;
             boundaries.extend_from_slice(&res.boundaries);
+            log::debug!(
+                "stitcher.merge: done step={} merged_n={} boundaries={}",
+                merge_idx + 1,
+                merged.len(),
+                boundaries.len()
+            );
         }
 
+        log::info!(
+            "stitcher: complete merged_n={} boundaries={}",
+            merged.len(),
+            boundaries.len()
+        );
         (merged, boundaries)
     }
 
@@ -42,14 +61,22 @@ impl TourStitcher {
         window: usize,
         passes: usize,
     ) {
-        let now = std::time::Instant::now();
+        let now = Instant::now();
         let n = tour.len();
         if n < MIN_TOUR_SIZE_FOR_2OPT || boundaries.is_empty() {
+            log::debug!(
+                "stitcher.2opt: skip n={} boundaries={} reason=insufficient_input",
+                n,
+                boundaries.len()
+            );
             return;
         }
 
-        for _pass in 0..passes {
-            let mut improved = false;
+        let mut passes_executed = 0usize;
+        let mut total_swaps = 0usize;
+        for pass_idx in 0..passes {
+            passes_executed = pass_idx + 1;
+            let mut pass_swaps = 0usize;
 
             for &b_idx in boundaries {
                 let start = b_idx.saturating_sub(window);
@@ -76,18 +103,29 @@ impl TourStitcher {
 
                         if new_dist < cur_dist - TWO_OPT_IMPROVEMENT_EPSILON {
                             tour[(idx_i + 1)..=idx_k].reverse();
-                            improved = true;
+                            pass_swaps += 1;
                         }
                     }
                 }
             }
 
-            if !improved {
+            total_swaps += pass_swaps;
+            log::debug!(
+                "stitcher.2opt: pass={} swaps={}",
+                pass_idx + 1,
+                pass_swaps
+            );
+
+            if pass_swaps == 0 {
                 break;
             }
         }
         log::info!(
-            "Boundary 2-opt finished in {:.2}s",
+            "stitcher.2opt: complete n={} boundaries={} passes={} swaps={} secs={:.2}",
+            n,
+            boundaries.len(),
+            passes_executed,
+            total_swaps,
             now.elapsed().as_secs_f32()
         );
     }
@@ -186,6 +224,7 @@ impl TourStitcher {
         }
 
         let Some((_a_cut_u, a_cut_v, b_cut_u, b_cut_v, flip_b, _score)) = best else {
+            log::warn!("stitcher.merge: no merge candidate found, appending tours");
             let mut merged = Vec::with_capacity(tour_a.len() + tour_b.len());
             merged.extend_from_slice(tour_a);
             merged.extend_from_slice(tour_b);

@@ -92,6 +92,7 @@ PI_FILE = {}
     }
 
     pub(crate) fn ensure_candidate_file(&self, n: usize) -> io::Result<()> {
+        log::debug!("solver.preprocess: start n={n}");
         let prep_par = self.work_dir.join(PREP_CANDIDATES_FILE.par());
         let prep_tour = self.work_dir.join(PREP_CANDIDATES_FILE.tour());
 
@@ -108,6 +109,7 @@ PI_FILE = {}
             return Err(io::Error::other(ERR_MISSING_CANDIDATE_FILE));
         }
 
+        log::debug!("solver.preprocess: done n={n}");
         Ok(())
     }
 
@@ -172,7 +174,7 @@ pub fn solve_tsp_with_lkh_parallel(
     let parallelism = LkhSolver::threads();
 
     log::info!(
-        "Starting LKH for {} points and will run for {}s across {parallelism} threads",
+        "solver: start n={} time_limit_s={} threads={parallelism}",
         input.n(),
         cfg.time_limit()
     );
@@ -196,7 +198,7 @@ pub fn solve_tsp_with_lkh_parallel(
                 rs.write_lkh_par(&cfg, &solver)?;
 
                 let now = Instant::now();
-                log::debug!("Starting tour for thread {idx}");
+                log::debug!("solver.run: start idx={idx} seed={seed}");
 
                 let out = solver.run(rs.par_path())?;
 
@@ -209,7 +211,7 @@ pub fn solve_tsp_with_lkh_parallel(
                 let len = TourGeometry::tour_length(&points, &tour);
 
                 log::debug!(
-                    "Finished tour for thread {idx} - took {:.2}s: {len:.0}m",
+                    "solver.run: done idx={idx} seed={seed} secs={:.2} tour_m={len:.0}",
                     now.elapsed().as_secs_f32()
                 );
                 Ok((tour, len))
@@ -217,10 +219,15 @@ pub fn solve_tsp_with_lkh_parallel(
             .collect::<io::Result<Vec<_>>>()
     })?;
 
-    let tour = results
+    let run_count = results.len();
+    let best = results
         .into_iter()
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .ok_or_else(|| io::Error::other(ERR_NO_RESULTS))?;
+    log::info!(
+        "solver: complete runs={run_count} best_tour_m={:.0}",
+        best.1
+    );
 
-    Ok(tour.0.into_iter().map(|idx| input.get_point(idx)).collect())
+    Ok(best.0.into_iter().map(|idx| input.get_point(idx)).collect())
 }
