@@ -3,7 +3,7 @@ use std::io;
 
 use h3o::{CellIndex, LatLng, Resolution};
 
-use crate::lkh::point::Point;
+use crate::lkh::node::LKHNode;
 
 const INITIAL_RESOLUTION: Resolution = Resolution::Four;
 const MAX_RESOLUTION: Resolution = Resolution::Fifteen;
@@ -13,7 +13,7 @@ pub(crate) struct H3Chunker;
 
 impl H3Chunker {
     pub(crate) fn partition_indices(
-        input: &[Point],
+        input: &[LKHNode],
         max_bucket_sz: usize,
     ) -> io::Result<Vec<Vec<usize>>> {
         let mut res = INITIAL_RESOLUTION;
@@ -90,7 +90,7 @@ impl H3Chunker {
     }
 
     fn bucket_by_res(
-        input: &[Point],
+        input: &[LKHNode],
         res: Resolution,
         subset: Option<&[usize]>,
     ) -> io::Result<HashMap<CellIndex, Vec<usize>>> {
@@ -98,7 +98,7 @@ impl H3Chunker {
 
         let mut add_index = |i: usize| -> io::Result<()> {
             let p = &input[i];
-            let ll = LatLng::new(p.lat, p.lng)
+            let ll = LatLng::new(p.lat(), p.lng())
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, ERR_INVALID_LAT_LNG))?;
             let cell = ll.to_cell(res);
             map.entry(cell).or_default().push(i);

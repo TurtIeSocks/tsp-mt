@@ -1,17 +1,17 @@
 use std::path::PathBuf;
 
-use crate::lkh::Point;
+use crate::lkh::LKHNode;
 
 /// Runtime input for LKH solver.
 #[derive(Clone, Debug)]
 pub struct SolverInput<'a> {
     pub(crate) lkh_exe: &'a PathBuf,
     pub(crate) work_dir: &'a PathBuf,
-    pub(crate) points: &'a [Point],
+    pub(crate) points: &'a [LKHNode],
 }
 
 impl<'a> SolverInput<'a> {
-    pub fn new(lkh_exe: &'a PathBuf, work_dir: &'a PathBuf, points: &'a [Point]) -> Self {
+    pub fn new(lkh_exe: &'a PathBuf, work_dir: &'a PathBuf, points: &'a [LKHNode]) -> Self {
         Self {
             lkh_exe,
             work_dir,
@@ -23,7 +23,7 @@ impl<'a> SolverInput<'a> {
         self.points.len()
     }
 
-    pub(crate) fn get_point(&self, idx: usize) -> Point {
+    pub(crate) fn get_point(&self, idx: usize) -> LKHNode {
         self.points[idx]
     }
 }

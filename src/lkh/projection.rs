@@ -1,7 +1,6 @@
-use geo::Coord;
 use map_3d::{self, Ellipsoid};
 
-use crate::lkh::point::Point;
+use crate::lkh::node::LKHNode;
 
 type Precision = f64;
 type Geocentric = (Precision, Precision, Precision);
@@ -32,14 +31,14 @@ impl Default for PlaneProjection {
 }
 
 impl PlaneProjection {
-    pub(crate) fn new(input: &[Point]) -> PlaneProjection {
+    pub(crate) fn new(input: &[LKHNode]) -> PlaneProjection {
         let mut plane = PlaneProjection {
             points: input
                 .iter()
                 .map(|p| {
                     map_3d::geodetic2ecef(
-                        p.lat.to_radians(),
-                        p.lng.to_radians(),
+                        p.y.to_radians(),
+                        p.x.to_radians(),
                         0.0,
                         Ellipsoid::default(),
                     )
@@ -73,17 +72,17 @@ impl PlaneProjection {
         self
     }
 
-    pub(crate) fn project(&self) -> Vec<Coord> {
+    pub(crate) fn project(&self) -> Vec<LKHNode> {
         let global_scale = self.dot_product(self.center, self.z) / self.adjusted_radius;
         let offset_x = self.dot_product(self.center, self.x) / self.adjusted_radius;
         self.points
             .iter()
             .map(|p| {
                 let scale = global_scale / self.dot_product(*p, self.z);
-                Coord {
-                    x: self.dot_product(*p, self.x) * scale - offset_x,
-                    y: self.dot_product(*p, self.y) * scale,
-                }
+                LKHNode::new(
+                    self.dot_product(*p, self.y) * scale,
+                    self.dot_product(*p, self.x) * scale - offset_x,
+                )
             })
             .collect()
     }

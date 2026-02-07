@@ -7,8 +7,8 @@ mod constants;
 mod geometry;
 mod h3_chunking;
 mod input;
+mod node;
 mod options;
-mod point;
 mod problem;
 mod process;
 mod projection;
@@ -18,6 +18,6 @@ mod stitching;
 
 pub use chunked::solve_tsp_with_lkh_h3_chunked;
 pub use input::SolverInput;
+pub use node::LKHNode;
 pub use options::SolverOptions;
-pub use point::Point;
 pub use solver::solve_tsp_with_lkh_parallel;

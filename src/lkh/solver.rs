@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -6,16 +7,13 @@ use std::{
     time::Instant,
 };
 
-use geo::Coord;
-use rayon::prelude::*;
-
 use crate::lkh::{
     SolverInput,
     config::LkhConfig,
     constants::{MIN_CYCLE_POINTS, PREP_CANDIDATES_FILE, PROBLEM_FILE, RUN_FILE},
     geometry::TourGeometry,
+    node::LKHNode,
     options::SolverOptions,
-    point::Point,
     problem::TsplibProblemWriter,
     process::LkhProcess,
     projection::PlaneProjection,
@@ -67,11 +65,11 @@ impl<'a> LkhSolver<'a> {
     }
 
     pub(crate) fn work_dir(&self) -> &Path {
-        &self.work_dir
+        self.work_dir
     }
 
     pub(crate) fn create_work_dir(&self) -> io::Result<()> {
-        fs::create_dir_all(&self.work_dir)
+        fs::create_dir_all(self.work_dir)
     }
 
     pub(crate) fn param_file(&self) -> String {
@@ -88,7 +86,7 @@ PI_FILE = {}
     }
 
     /// Write TSPLIB EUC_2D problem using projected XY.
-    pub(crate) fn create_problem_file(&self, points: &[Coord]) -> io::Result<()> {
+    pub(crate) fn create_problem_file(&self, points: &[LKHNode]) -> io::Result<()> {
         TsplibProblemWriter::write_euc2d(&self.problem_file, PROBLEM_FILE.name(), points)
     }
 
@@ -113,9 +111,9 @@ PI_FILE = {}
     }
 
     pub(crate) fn run(&self, par_path: &Path) -> io::Result<Output> {
-        Command::new(&self.executable)
+        Command::new(self.executable)
             .arg(par_path)
-            .current_dir(&self.work_dir)
+            .current_dir(self.work_dir)
             .output()
     }
 }
@@ -139,7 +137,7 @@ fn rm_file(pb: &Path) {
 pub fn solve_tsp_with_lkh_parallel(
     input: SolverInput,
     options: SolverOptions,
-) -> io::Result<Vec<Point>> {
+) -> io::Result<Vec<LKHNode>> {
     if input.n() < MIN_CYCLE_POINTS {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

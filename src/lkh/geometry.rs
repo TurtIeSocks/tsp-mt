@@ -1,9 +1,9 @@
-use geo::Coord;
+use crate::lkh::node::LKHNode;
 
 pub(crate) struct TourGeometry;
 
 impl TourGeometry {
-    pub(crate) fn tour_length(points: &[Coord], tour: &[usize]) -> f64 {
+    pub(crate) fn tour_length(points: &[LKHNode], tour: &[usize]) -> f64 {
         let n = tour.len();
         let mut sum = 0.0;
         for i in 0..n {
@@ -15,13 +15,13 @@ impl TourGeometry {
     }
 
     #[inline]
-    pub(crate) fn dist(a: Coord, b: Coord) -> f64 {
+    pub(crate) fn dist(a: LKHNode, b: LKHNode) -> f64 {
         let dx = a.x - b.x;
         let dy = a.y - b.y;
         (dx * dx + dy * dy).sqrt()
     }
 
-    pub(crate) fn centroid_of_indices(coords: &[Coord], idxs: &[usize]) -> Coord {
+    pub(crate) fn centroid_of_indices(coords: &[LKHNode], idxs: &[usize]) -> LKHNode {
         let mut sx = 0.0;
         let mut sy = 0.0;
         for &i in idxs {
@@ -29,10 +29,7 @@ impl TourGeometry {
             sy += coords[i].y;
         }
         let n = idxs.len().max(1) as f64;
-        Coord {
-            x: sx / n,
-            y: sy / n,
-        }
+        LKHNode::new(sy / n, sx / n)
     }
 
     pub(crate) fn rotate_cycle(tour: &[usize], start_node: usize) -> Vec<usize> {

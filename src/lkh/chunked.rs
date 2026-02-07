@@ -5,7 +5,6 @@ use std::{
     time::Instant,
 };
 
-use geo::Coord;
 use rayon::prelude::*;
 
 use crate::lkh::{
@@ -14,8 +13,8 @@ use crate::lkh::{
     constants::{CENTROIDS_FILE, MIN_CYCLE_POINTS, RUN_FILE},
     geometry::TourGeometry,
     h3_chunking::H3Chunker,
+    node::LKHNode,
     options::SolverOptions,
-    point::Point,
     problem::TsplibProblemWriter,
     process::LkhProcess,
     projection::PlaneProjection,
@@ -41,7 +40,7 @@ impl ChunkSolver {
     fn solve_single(
         lkh_exe: &PathBuf,
         work_dir: &PathBuf,
-        chunk_points: &[Point],
+        chunk_points: &[LKHNode],
         options: &SolverOptions,
     ) -> io::Result<Vec<usize>> {
         let n = chunk_points.len();
@@ -81,7 +80,7 @@ impl ChunkSolver {
     fn order_by_centroid_tsp(
         lkh_exe: &Path,
         work_dir: &Path,
-        centroids: &[Coord],
+        centroids: &[LKHNode],
         options: &SolverOptions,
     ) -> io::Result<Vec<usize>> {
         if centroids.len() <= MAX_CENTROIDS_WITH_TRIVIAL_ORDER {
@@ -118,7 +117,7 @@ impl ChunkSolver {
 pub fn solve_tsp_with_lkh_h3_chunked(
     input: SolverInput,
     options: SolverOptions,
-) -> io::Result<Vec<Point>> {
+) -> io::Result<Vec<LKHNode>> {
     if options.max_chunk_size == 0 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -160,7 +159,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         .par_iter()
         .enumerate()
         .map(|(chunk_id, idxs)| -> io::Result<Vec<usize>> {
-            let chunk_points: Vec<Point> = idxs.iter().map(|&i| input.get_point(i)).collect();
+            let chunk_points: Vec<LKHNode> = idxs.iter().map(|&i| input.get_point(i)).collect();
             let chunk_dir = input.work_dir.join(format!("{CHUNK_DIR_PREFIX}{chunk_id}"));
 
             let now = Instant::now();
@@ -180,13 +179,14 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         })
         .collect::<io::Result<Vec<_>>>()?;
 
-    let centroids: Vec<Coord> = chunks
+    let centroids: Vec<LKHNode> = chunks
         .iter()
         .map(|idxs| TourGeometry::centroid_of_indices(&global_coords, idxs))
         .collect();
 
     let order_dir = input.work_dir.join(CHUNK_ORDER_DIR);
-    let order = ChunkSolver::order_by_centroid_tsp(input.lkh_exe, &order_dir, &centroids, &options)?;
+    let order =
+        ChunkSolver::order_by_centroid_tsp(input.lkh_exe, &order_dir, &centroids, &options)?;
 
     let mut ordered_tours: Vec<Vec<usize>> = Vec::with_capacity(solved_chunk_tours.len());
     for ci in order {

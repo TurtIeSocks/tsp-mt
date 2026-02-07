@@ -1,6 +1,6 @@
 use std::{fs, io, path::Path};
 
-use geo::Coord;
+use crate::lkh::node::LKHNode;
 
 const EUC2D_SCALE: f64 = 1_000.0;
 const TSPLIB_NODE_ID_BASE: usize = 1;
@@ -12,7 +12,7 @@ const TSPLIB_EOF_LINE: &str = "EOF\n";
 pub(crate) struct TsplibProblemWriter;
 
 impl TsplibProblemWriter {
-    pub(crate) fn write_euc2d(path: &Path, name: &str, points: &[Coord]) -> io::Result<()> {
+    pub(crate) fn write_euc2d(path: &Path, name: &str, points: &[LKHNode]) -> io::Result<()> {
         let mut body = String::new();
         body.push_str(&format!("NAME: {name}\n"));
         body.push_str(TSPLIB_TYPE_TSP_LINE);

@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use geo::Coord;
 use kiddo::{KdTree, SquaredEuclidean};
 
-use crate::lkh::geometry::TourGeometry;
+use crate::lkh::{geometry::TourGeometry, node::LKHNode};
 
 const LARGE_JUMP_PENALTY: f64 = 500.0;
 const LARGE_JUMP_DISTANCE_THRESHOLD: f64 = 1_000.0;
@@ -21,7 +20,7 @@ pub(crate) struct TourStitcher;
 
 impl TourStitcher {
     pub(crate) fn stitch_chunk_tours_dense(
-        coords: &[Coord],
+        coords: &[LKHNode],
         mut chunk_tours: Vec<Vec<usize>>,
     ) -> (Vec<usize>, Vec<usize>) {
         let mut merged = chunk_tours.remove(0);
@@ -37,7 +36,7 @@ impl TourStitcher {
     }
 
     pub(crate) fn boundary_two_opt(
-        coords: &[Coord],
+        coords: &[LKHNode],
         tour: &mut [usize],
         boundaries: &[usize],
         window: usize,
@@ -99,7 +98,11 @@ impl TourStitcher {
 
     /// Merges two tours by finding the strictly closest points between them.
     /// This prevents random portals from creating large outlier jumps.
-    fn merge_two_cycles_dense(coords: &[Coord], tour_a: &[usize], tour_b: &[usize]) -> MergeResult {
+    fn merge_two_cycles_dense(
+        coords: &[LKHNode],
+        tour_a: &[usize],
+        tour_b: &[usize],
+    ) -> MergeResult {
         let mut tree: KdTree<f64, 2> = KdTree::new();
         for &node in tour_b {
             let c = coords[node];

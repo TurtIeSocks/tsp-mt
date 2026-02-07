@@ -24,12 +24,9 @@ fn main() -> std::io::Result<()> {
 
     eprintln!("Workdir: {:?} | LKH: {lkh:?}", &work_dir);
 
-    let input: Vec<lkh::Point> = points
+    let input: Vec<lkh::LKHNode> = points
         .iter()
-        .map(|p| lkh::Point {
-            lat: p.lat,
-            lng: p.lng,
-        })
+        .map(|p| lkh::LKHNode::new(p.lat, p.lng))
         .collect();
 
     let route = lkh::solve_tsp_with_lkh_h3_chunked(
@@ -60,10 +57,7 @@ fn main() -> std::io::Result<()> {
 
     let route_for_metrics: Vec<utils::Point> = route
         .iter()
-        .map(|p| utils::Point {
-            lat: p.lat,
-            lng: p.lng,
-        })
+        .map(|p| utils::Point { lat: p.y, lng: p.x })
         .collect();
     utils::measure_distance_open(&route_for_metrics);
     // run_single(&path, &points);
