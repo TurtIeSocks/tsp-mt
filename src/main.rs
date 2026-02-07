@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use log::info;
 
 use tsp_mt_core::{
@@ -7,9 +5,15 @@ use tsp_mt_core::{
 };
 
 fn main() -> Result<()> {
-    let now = Instant::now();
     let options = SolverOptions::from_args()?;
     logging::init_logger(&options)?;
+
+    // We needed to init the logger before the timer macro
+    main_inner(options)
+}
+
+#[tsp_mt_derive::timer("main")]
+fn main_inner(options: SolverOptions) -> Result<()> {
     let input = SolverInput::from_args()?;
 
     info!("input: {input}");
@@ -20,12 +24,6 @@ fn main() -> Result<()> {
     for point in route.iter() {
         println!("{point}");
     }
-
-    info!(
-        "output: n={} time={:.2}s",
-        route.len(),
-        now.elapsed().as_secs_f32()
-    );
 
     utils::tour_distance(&route);
 

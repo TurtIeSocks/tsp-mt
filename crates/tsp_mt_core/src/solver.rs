@@ -3,7 +3,6 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Output},
     thread,
-    time::Instant,
 };
 
 use rayon::prelude::*;
@@ -139,6 +138,7 @@ fn rm_file(pb: &Path) {
 
 /// Solve TSP by spawning multiple LKH processes in parallel with different SEEDs.
 /// Returns best tour points.
+#[tsp_mt_derive::timer("solver")]
 pub fn solve_tsp_with_lkh_parallel(
     input: SolverInput,
     options: SolverOptions,
@@ -192,7 +192,6 @@ pub fn solve_tsp_with_lkh_parallel(
                 );
                 rs.write_lkh_par(&cfg, &solver)?;
 
-                let now = Instant::now();
                 log::debug!("solver.run: start idx={idx} seed={seed}");
 
                 let out = solver.run(rs.par_path())?;
@@ -205,10 +204,7 @@ pub fn solve_tsp_with_lkh_parallel(
                 let tour = rs.parse_tsplib_tour(points.len())?;
                 let len = TourGeometry::tour_length(&points, &tour);
 
-                log::debug!(
-                    "solver.run: done idx={idx} seed={seed} secs={:.2} tour_m={len:.0}",
-                    now.elapsed().as_secs_f32()
-                );
+                log::debug!("solver.run: done idx={idx} seed={seed} tour_m={len:.0}");
                 Ok((tour, len))
             })
             .collect::<Result<Vec<_>>>()

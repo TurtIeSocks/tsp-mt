@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::time::Instant;
 
 use kiddo::{KdTree, SquaredEuclidean};
 
@@ -54,6 +53,7 @@ impl TourStitcher {
         (merged, boundaries)
     }
 
+    #[tsp_mt_derive::timer("stitcher.2opt")]
     pub(crate) fn boundary_two_opt(
         coords: &[LKHNode],
         tour: &mut [usize],
@@ -61,7 +61,6 @@ impl TourStitcher {
         window: usize,
         passes: usize,
     ) {
-        let now = Instant::now();
         let n = tour.len();
         if n < MIN_TOUR_SIZE_FOR_2OPT || boundaries.is_empty() {
             log::debug!(
@@ -117,12 +116,11 @@ impl TourStitcher {
             }
         }
         log::info!(
-            "stitcher.2opt: complete n={} boundaries={} passes={} swaps={} secs={:.2}",
+            "stitcher.2opt: complete n={} boundaries={} passes={} swaps={}",
             n,
             boundaries.len(),
             passes_executed,
-            total_swaps,
-            now.elapsed().as_secs_f32()
+            total_swaps
         );
     }
 

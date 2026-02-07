@@ -762,6 +762,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "tsp_mt_core",
+ "tsp_mt_derive",
 ]
 
 [[package]]
@@ -777,6 +778,7 @@ dependencies = [
  "rayon",
  "ryu",
  "thiserror",
+ "tsp_mt_derive",
 ]
 
 [[package]]

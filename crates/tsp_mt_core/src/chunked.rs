@@ -1,8 +1,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Command,
-    time::Instant,
+    process::Command, time::Instant,
 };
 
 use rayon::prelude::*;
@@ -121,6 +120,7 @@ impl ChunkSolver {
     }
 }
 
+#[tsp_mt_derive::timer("chunked")]
 pub fn solve_tsp_with_lkh_h3_chunked(
     input: SolverInput,
     options: SolverOptions,
@@ -144,7 +144,6 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         return super::solve_tsp_with_lkh_parallel(input, options);
     }
 
-    let total_now = Instant::now();
     let global_coords = PlaneProjection::new(&input.points)
         .radius(options.projection_radius)
         .project();
@@ -210,10 +209,9 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         options.boundary_2opt_passes,
     );
     log::info!(
-        "chunked: complete n={} chunks={} secs={:.2}",
+        "chunked: complete n={} chunks={}",
         merged.len(),
-        chunks.len(),
-        total_now.elapsed().as_secs_f32()
+        chunks.len()
     );
 
     Ok(merged.into_iter().map(|i| input.get_point(i)).collect())

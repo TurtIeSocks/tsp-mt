@@ -14,3 +14,4 @@ h3o = "0.9.4"
 log = "0.4.29"
 env_logger = "0.11.8"
 thiserror = "2.0.18"
+tsp_mt_derive = { path = "../tsp_mt_derive" }
