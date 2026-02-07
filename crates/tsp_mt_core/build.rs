@@ -13,23 +13,31 @@ const LKH_WINDOWS_EXE: &str = "LKH.exe";
 const LKH_WINDOWS_URL: &str = "http://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=../../lkh/lkh.tgz");
-    println!("cargo:rerun-if-changed=../../{LKH_WINDOWS_EXE}");
-    println!("cargo:rerun-if-env-changed=TSP_MT_LKH_URL");
-
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
-    let out_dir = PathBuf::from(env::var("OUT_DIR")?);
     let workspace_root = manifest_dir
         .parent()
         .and_then(Path::parent)
         .ok_or("failed to resolve workspace root")?;
+    let out_dir = PathBuf::from(env::var("OUT_DIR")?);
+
+    println!("cargo:rerun-if-changed=build.rs");
 
     if cfg!(target_os = "windows") {
+        let root_exe = workspace_root.join(LKH_WINDOWS_EXE);
+        if root_exe.exists() {
+            println!("cargo:rerun-if-changed={}", root_exe.display());
+        }
         return build_windows(workspace_root, &out_dir);
     }
+
     if !cfg!(target_family = "unix") {
         return Err("LKH build is only supported on unix-like targets and Windows".into());
+    }
+
+    println!("cargo:rerun-if-env-changed=TSP_MT_LKH_URL");
+    let vendored_archive = workspace_root.join("lkh").join("lkh.tgz");
+    if vendored_archive.exists() {
+        println!("cargo:rerun-if-changed={}", vendored_archive.display());
     }
 
     build_unix(workspace_root, &out_dir)
@@ -47,7 +55,7 @@ fn build_windows(workspace_root: &Path, out_dir: &Path) -> Result<(), Box<dyn Er
     }
 
     let bundled_bin = out_dir.join("lkh.bin");
-    fs::copy(&root_exe, &bundled_bin)?;
+    copy_if_different(&root_exe, &bundled_bin)?;
     write_embedded_source(out_dir, &bundled_bin)?;
     Ok(())
 }
@@ -83,7 +91,7 @@ fn build_unix(workspace_root: &Path, out_dir: &Path) -> Result<(), Box<dyn Error
     }
 
     let bundled_bin = out_dir.join("lkh.bin");
-    fs::copy(&built_exe, &bundled_bin)?;
+    copy_if_different(&built_exe, &bundled_bin)?;
     write_embedded_source(out_dir, &bundled_bin)?;
 
     Ok(())
@@ -96,8 +104,22 @@ fn write_embedded_source(out_dir: &Path, bundled_bin: &Path) -> Result<(), Box<d
          pub static LKH_EXECUTABLE_BYTES: &[u8] = include_bytes!(r#\"{}\"#);\n",
         bundled_bin.display()
     );
-    fs::write(generated, source)?;
+    write_if_different(&generated, source.as_bytes())?;
     Ok(())
+}
+
+fn copy_if_different(src: &Path, dst: &Path) -> io::Result<()> {
+    let src_bytes = fs::read(src)?;
+    write_if_different(dst, &src_bytes)
+}
+
+fn write_if_different(path: &Path, data: &[u8]) -> io::Result<()> {
+    if let Ok(existing) = fs::read(path) {
+        if existing == data {
+            return Ok(());
+        }
+    }
+    fs::write(path, data)
 }
 
 fn ensure_archive(workspace_root: &Path, archive_path: &Path) -> Result<(), Box<dyn Error>> {
