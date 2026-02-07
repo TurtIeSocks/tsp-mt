@@ -1,6 +1,6 @@
 use std::{fs, io, path::Path};
 
-use crate::lkh::node::LKHNode;
+use crate::node::LKHNode;
 
 const EUC2D_SCALE: f64 = 1_000.0;
 const TSPLIB_NODE_ID_BASE: usize = 1;

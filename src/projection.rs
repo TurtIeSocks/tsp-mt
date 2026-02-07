@@ -1,6 +1,6 @@
 use map_3d::{self, Ellipsoid};
 
-use crate::lkh::node::LKHNode;
+use crate::node::LKHNode;
 
 type Precision = f64;
 type Geocentric = (Precision, Precision, Precision);

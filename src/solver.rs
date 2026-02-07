@@ -7,7 +7,7 @@ use std::{
     time::Instant,
 };
 
-use crate::lkh::{
+use crate::{
     SolverInput,
     config::LkhConfig,
     constants::{MIN_CYCLE_POINTS, PREP_CANDIDATES_FILE, PROBLEM_FILE, RUN_FILE},

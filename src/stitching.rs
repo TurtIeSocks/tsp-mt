@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use kiddo::{KdTree, SquaredEuclidean};
 
-use crate::lkh::{geometry::TourGeometry, node::LKHNode};
+use crate::{geometry::TourGeometry, node::LKHNode};
 
 const LARGE_JUMP_PENALTY: f64 = 500.0;
 const LARGE_JUMP_DISTANCE_THRESHOLD: f64 = 1_000.0;

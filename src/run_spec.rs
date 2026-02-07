@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::lkh::{config::LkhConfig, solver::LkhSolver};
+use crate::{config::LkhConfig, solver::LkhSolver};
 
 const SMALL_RUNS: usize = 1;
 const SMALL_TRACE_LEVEL: usize = 0;

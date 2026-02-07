@@ -1,12 +1,11 @@
 use std::{env, time::Instant};
 
+use tsp_mt::{LKHNode, SolverInput, SolverOptions, solve_tsp_with_lkh_h3_chunked, utils};
+
 // mod outliers;
 // mod processing;
 // mod stats;
 // mod tsp;
-mod utils;
-
-use tsp_mt::lkh::{self, SolverInput, SolverOptions};
 
 fn main() -> std::io::Result<()> {
     let now = Instant::now();
@@ -24,12 +23,12 @@ fn main() -> std::io::Result<()> {
 
     eprintln!("Workdir: {:?} | LKH: {lkh:?}", &work_dir);
 
-    let input: Vec<lkh::LKHNode> = points
+    let input: Vec<LKHNode> = points
         .iter()
-        .map(|p| lkh::LKHNode::new(p.lat, p.lng))
+        .map(|p| LKHNode::new(p.lat, p.lng))
         .collect();
 
-    let route = lkh::solve_tsp_with_lkh_h3_chunked(
+    let route = solve_tsp_with_lkh_h3_chunked(
         SolverInput::new(&lkh, &work_dir, &input),
         SolverOptions::default(),
     )?;

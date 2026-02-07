@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::lkh::LKHNode;
+use crate::LKHNode;
 
 /// Runtime input for LKH solver.
 #[derive(Clone, Debug)]

@@ -7,7 +7,7 @@ use std::{
 
 use rayon::prelude::*;
 
-use crate::lkh::{
+use crate::{
     SolverInput,
     config::LkhConfig,
     constants::{CENTROIDS_FILE, MIN_CYCLE_POINTS, RUN_FILE},

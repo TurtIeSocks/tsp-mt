@@ -3,7 +3,7 @@ use std::io;
 
 use h3o::{CellIndex, LatLng, Resolution};
 
-use crate::lkh::node::LKHNode;
+use crate::node::LKHNode;
 
 const INITIAL_RESOLUTION: Resolution = Resolution::Four;
 const MAX_RESOLUTION: Resolution = Resolution::Fifteen;

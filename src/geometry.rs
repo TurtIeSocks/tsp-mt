@@ -1,4 +1,4 @@
-use crate::lkh::node::LKHNode;
+use crate::node::LKHNode;
 
 pub(crate) struct TourGeometry;
 
