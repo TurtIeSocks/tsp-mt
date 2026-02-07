@@ -4,6 +4,7 @@
 mod chunked;
 mod config;
 mod constants;
+mod embedded_lkh;
 mod geometry;
 mod h3_chunking;
 mod input;

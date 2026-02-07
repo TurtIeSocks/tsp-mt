@@ -1,9 +1,10 @@
 use std::{
-    env, io::{self, Read},
+    env,
+    io::{self, Read},
     path::{Path, PathBuf},
 };
 
-use crate::LKHNode;
+use crate::{LKHNode, embedded_lkh};
 
 /// Runtime input for LKH solver.
 #[derive(Clone, Debug)]
@@ -24,8 +25,8 @@ impl SolverInput {
 
     pub fn from_args() -> io::Result<Self> {
         let current = env::current_dir()?;
-        let mut lkh_exe = current.join("lkh/LKH-3.0.13/LKH");
-        let mut work_dir = current.join("temp");
+        let mut lkh_exe = None;
+        let mut work_dir = current.join(".temp");
 
         let mut args = env::args().skip(1).peekable();
         while let Some(arg) = args.next() {
@@ -49,7 +50,7 @@ impl SolverInput {
                             format!("Missing value for --{}", name),
                         )
                     })?;
-                    lkh_exe = PathBuf::from(raw);
+                    lkh_exe = Some(PathBuf::from(raw));
                 }
                 "work-dir" => {
                     let raw = value.ok_or_else(|| {
@@ -65,6 +66,7 @@ impl SolverInput {
         }
 
         let points = read_points_from_stdin()?;
+        let lkh_exe = lkh_exe.unwrap_or(embedded_lkh::ensure_lkh_executable()?);
         Ok(Self {
             lkh_exe,
             work_dir,
@@ -122,7 +124,6 @@ fn read_points_from_stdin() -> std::io::Result<Vec<LKHNode>> {
     std::io::stdin().read_to_string(&mut input)?;
 
     let mut points = Vec::new();
-
     for (idx, tok) in input.split_whitespace().enumerate() {
         let mut it = tok.split(',');
         let lat_s = it.next().ok_or_else(|| {
