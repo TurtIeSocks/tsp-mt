@@ -1,11 +1,12 @@
-use std::io::{self, Write};
+use std::io::Write;
 
 use env_logger::{Builder, Target, fmt::Formatter};
 use log::Level;
 
+use crate::Result;
 use crate::options::{LogFormat, SolverOptions};
 
-pub fn init_logger(options: &SolverOptions) -> io::Result<()> {
+pub fn init_logger(options: &SolverOptions) -> Result<()> {
     let log_format = options.log_format;
     let log_timestamp = options.log_timestamp;
 
@@ -35,7 +36,9 @@ pub fn init_logger(options: &SolverOptions) -> io::Result<()> {
             }
         });
 
-    builder.try_init().map_err(io::Error::other)
+    builder
+        .try_init()
+        .map_err(|e| crate::Error::other(format!("logger init failed: {e}")))
 }
 
 fn level_tag(level: Level) -> &'static str {

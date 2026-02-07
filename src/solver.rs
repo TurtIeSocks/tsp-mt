@@ -1,5 +1,5 @@
 use std::{
-    fs, io,
+    fs,
     path::{Path, PathBuf},
     process::{Command, Output},
     thread,
@@ -9,7 +9,7 @@ use std::{
 use rayon::prelude::*;
 
 use crate::{
-    SolverInput,
+    Error, Result, SolverInput,
     config::LkhConfig,
     constants::{MIN_CYCLE_POINTS, PREP_CANDIDATES_FILE, PROBLEM_FILE, RUN_FILE},
     geometry::TourGeometry,
@@ -69,8 +69,9 @@ impl<'a> LkhSolver<'a> {
         self.work_dir
     }
 
-    pub(crate) fn create_work_dir(&self) -> io::Result<()> {
-        fs::create_dir_all(self.work_dir)
+    pub(crate) fn create_work_dir(&self) -> Result<()> {
+        fs::create_dir_all(self.work_dir)?;
+        Ok(())
     }
 
     pub(crate) fn param_file(&self) -> String {
@@ -87,11 +88,11 @@ PI_FILE = {}
     }
 
     /// Write TSPLIB EUC_2D problem using projected XY.
-    pub(crate) fn create_problem_file(&self, points: &[LKHNode]) -> io::Result<()> {
+    pub(crate) fn create_problem_file(&self, points: &[LKHNode]) -> Result<()> {
         TsplibProblemWriter::write_euc2d(&self.problem_file, PROBLEM_FILE.name(), points)
     }
 
-    pub(crate) fn ensure_candidate_file(&self, n: usize) -> io::Result<()> {
+    pub(crate) fn ensure_candidate_file(&self, n: usize) -> Result<()> {
         log::debug!("solver.preprocess: start n={n}");
         let prep_par = self.work_dir.join(PREP_CANDIDATES_FILE.par());
         let prep_tour = self.work_dir.join(PREP_CANDIDATES_FILE.tour());
@@ -106,18 +107,19 @@ PI_FILE = {}
         LkhProcess::ensure_success(ERR_LKH_PREPROCESS_FAILED, &out)?;
 
         if !self.candidate_file.exists() {
-            return Err(io::Error::other(ERR_MISSING_CANDIDATE_FILE));
+            return Err(Error::other(ERR_MISSING_CANDIDATE_FILE));
         }
 
         log::debug!("solver.preprocess: done n={n}");
         Ok(())
     }
 
-    pub(crate) fn run(&self, par_path: &Path) -> io::Result<Output> {
+    pub(crate) fn run(&self, par_path: &Path) -> Result<Output> {
         Command::new(self.executable)
             .arg(par_path)
             .current_dir(self.work_dir)
             .output()
+            .map_err(Error::from)
     }
 }
 
@@ -140,24 +142,17 @@ fn rm_file(pb: &Path) {
 pub fn solve_tsp_with_lkh_parallel(
     input: SolverInput,
     options: SolverOptions,
-) -> io::Result<Vec<LKHNode>> {
+) -> Result<Vec<LKHNode>> {
     if input.n() < MIN_CYCLE_POINTS {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("Need at least {MIN_CYCLE_POINTS} points for a cycle"),
-        ));
+        return Err(Error::invalid_input(format!(
+            "Need at least {MIN_CYCLE_POINTS} points for a cycle"
+        )));
     }
     if options.projection_radius <= 0.0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            ERR_INVALID_PROJECTION_RADIUS,
-        ));
+        return Err(Error::invalid_input(ERR_INVALID_PROJECTION_RADIUS));
     }
     if input.points.iter().any(|p| !p.is_valid()) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            ERR_INVALID_POINT,
-        ));
+        return Err(Error::invalid_input(ERR_INVALID_POINT));
     }
 
     let cfg = LkhConfig::new(input.n());
@@ -182,13 +177,13 @@ pub fn solve_tsp_with_lkh_parallel(
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(parallelism)
         .build()
-        .map_err(|e| io::Error::other(format!("rayon pool: {e}")))?;
+        .map_err(|e| Error::other(format!("rayon pool: {e}")))?;
 
     let results: Vec<(Vec<usize>, f64)> = pool.install(|| {
         cfg.generate_seeds(parallelism)
             .into_par_iter()
             .enumerate()
-            .map(|(idx, seed)| -> io::Result<(Vec<usize>, f64)> {
+            .map(|(idx, seed)| -> Result<(Vec<usize>, f64)> {
                 let rs = RunSpec::new(
                     idx,
                     seed,
@@ -216,14 +211,14 @@ pub fn solve_tsp_with_lkh_parallel(
                 );
                 Ok((tour, len))
             })
-            .collect::<io::Result<Vec<_>>>()
+            .collect::<Result<Vec<_>>>()
     })?;
 
     let run_count = results.len();
     let best = results
         .into_iter()
         .min_by(|a, b| a.1.total_cmp(&b.1))
-        .ok_or_else(|| io::Error::other(ERR_NO_RESULTS))?;
+        .ok_or_else(|| Error::other(ERR_NO_RESULTS))?;
     log::info!(
         "solver: complete runs={run_count} best_tour_m={:.0}",
         best.1

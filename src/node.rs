@@ -1,6 +1,8 @@
 use std::fmt;
 
 const R: f64 = 6_371_000.0;
+const NINETY: f64 = 90.0;
+const ONE_EIGHTY: f64 = NINETY * 2.0;
 
 /// LKH point representation.
 /// For geographic input, `x=lng` and `y=lat` in degrees.
@@ -30,8 +32,8 @@ impl LKHNode {
     pub(crate) fn is_valid(self) -> bool {
         self.y.is_finite()
             && self.x.is_finite()
-            && (-90.0..=90.0).contains(&self.y)
-            && (-180.0..=180.0).contains(&self.x)
+            && (-NINETY..=NINETY).contains(&self.y)
+            && (-ONE_EIGHTY..=ONE_EIGHTY).contains(&self.x)
     }
 
     pub fn dist(self, rhs: &Self) -> f64 {

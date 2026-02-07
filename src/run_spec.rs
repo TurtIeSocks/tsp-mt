@@ -1,9 +1,9 @@
 use std::{
-    fs, io,
+    fs,
     path::{Path, PathBuf},
 };
 
-use crate::{config::LkhConfig, solver::LkhSolver};
+use crate::{Error, Result, config::LkhConfig, solver::LkhSolver};
 
 const SMALL_RUNS: usize = 1;
 const SMALL_TRACE_LEVEL: usize = 0;
@@ -53,7 +53,7 @@ impl RunSpec {
         )
     }
 
-    pub(crate) fn write_lkh_par(&self, cfg: &LkhConfig, solver: &LkhSolver) -> io::Result<()> {
+    pub(crate) fn write_lkh_par(&self, cfg: &LkhConfig, solver: &LkhSolver) -> Result<()> {
         let s = format!(
             "{}\n{}\n{}",
             self.param_file(),
@@ -61,7 +61,8 @@ impl RunSpec {
             solver.param_file()
         );
 
-        fs::write(&self.par_path, s)
+        fs::write(&self.par_path, s)?;
+        Ok(())
     }
 
     /// Small-problem par writer for centroid ordering.
@@ -70,7 +71,7 @@ impl RunSpec {
         problem_path: &Path,
         max_trials: usize,
         time_limit: usize,
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         let s = format!(
             "\
 PROBLEM_FILE = {}
@@ -92,10 +93,11 @@ MAX_CANDIDATES = {} SYMMETRIC
             SMALL_MAX_CANDIDATES,
         );
 
-        fs::write(&self.par_path, s)
+        fs::write(&self.par_path, s)?;
+        Ok(())
     }
 
-    pub(crate) fn parse_tsplib_tour(&self, n: usize) -> io::Result<Vec<usize>> {
+    pub(crate) fn parse_tsplib_tour(&self, n: usize) -> Result<Vec<usize>> {
         let text = fs::read_to_string(&self.tour_path)?;
         let mut in_section = false;
         let mut tour: Vec<usize> = Vec::with_capacity(n);
@@ -112,12 +114,9 @@ MAX_CANDIDATES = {} SYMMETRIC
             if line == TOUR_END_MARKER || line.eq_ignore_ascii_case(EOF_MARKER) {
                 break;
             }
-            let id: isize = line.parse().map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Bad tour line '{line}': {e}"),
-                )
-            })?;
+            let id: isize = line
+                .parse()
+                .map_err(|e| Error::invalid_data(format!("Bad tour line '{line}': {e}")))?;
             if id < MIN_VALID_TSPLIB_NODE_ID {
                 continue;
             }
@@ -125,10 +124,10 @@ MAX_CANDIDATES = {} SYMMETRIC
         }
 
         if tour.len() != n {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Expected {n} nodes in tour, got {}", tour.len()),
-            ));
+            return Err(Error::invalid_data(format!(
+                "Expected {n} nodes in tour, got {}",
+                tour.len()
+            )));
         }
         Ok(tour)
     }

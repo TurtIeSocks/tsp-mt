@@ -1,10 +1,10 @@
 use std::{
     env,
-    io::{self, Read},
+    io::Read,
     path::{Path, PathBuf},
 };
 
-use crate::{LKHNode, embedded_lkh};
+use crate::{Error, LKHNode, Result, embedded_lkh};
 
 /// Runtime input for LKH solver.
 #[derive(Clone, Debug)]
@@ -23,7 +23,7 @@ impl SolverInput {
         }
     }
 
-    pub fn from_args() -> io::Result<Self> {
+    pub fn from_args() -> Result<Self> {
         let current = env::current_dir()?;
         let mut lkh_exe = None;
         let mut work_dir = current.join(".temp");
@@ -31,10 +31,7 @@ impl SolverInput {
         let mut args = env::args().skip(1).peekable();
         while let Some(arg) = args.next() {
             if arg == "--help" || arg == "-h" {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    Self::usage().to_string(),
-                ));
+                return Err(Error::invalid_input(Self::usage()));
             }
             let Some(raw_name) = arg.strip_prefix("--") else {
                 continue;
@@ -45,19 +42,13 @@ impl SolverInput {
             match name.as_str() {
                 "lkh-exe" => {
                     let raw = value.ok_or_else(|| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("Missing value for --{}", name),
-                        )
+                        Error::invalid_input(format!("Missing value for --{}", name))
                     })?;
                     lkh_exe = Some(PathBuf::from(raw));
                 }
                 "work-dir" => {
                     let raw = value.ok_or_else(|| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("Missing value for --{}", name),
-                        )
+                        Error::invalid_input(format!("Missing value for --{}", name))
                     })?;
                     work_dir = PathBuf::from(raw);
                 }
@@ -119,57 +110,39 @@ fn split_arg(
     (raw_name.to_string(), value)
 }
 
-fn read_points_from_stdin() -> std::io::Result<Vec<LKHNode>> {
+fn read_points_from_stdin() -> Result<Vec<LKHNode>> {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input)?;
 
     let mut points = Vec::new();
     for (idx, tok) in input.split_whitespace().enumerate() {
         let mut it = tok.split(',');
-        let lat_s = it.next().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Token {}: missing latitude", idx + 1),
-            )
-        })?;
-        let lon_s = it.next().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Token {}: missing longitude", idx + 1),
-            )
-        })?;
+        let lat_s = it
+            .next()
+            .ok_or_else(|| Error::invalid_input(format!("Token {}: missing latitude", idx + 1)))?;
+        let lon_s = it
+            .next()
+            .ok_or_else(|| Error::invalid_input(format!("Token {}: missing longitude", idx + 1)))?;
 
         if it.next().is_some() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!(
-                    "Token {}: expected 'lat,lng' but got extra comma fields: {tok}",
-                    idx + 1
-                ),
-            ));
+            return Err(Error::invalid_input(format!(
+                "Token {}: expected 'lat,lng' but got extra comma fields: {tok}",
+                idx + 1
+            )));
         }
 
         let lat: f64 = lat_s.parse().map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Token {}: invalid latitude: {}", idx + 1, lat_s),
-            )
+            Error::invalid_input(format!("Token {}: invalid latitude: {}", idx + 1, lat_s))
         })?;
         let lon: f64 = lon_s.parse().map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Token {}: invalid longitude: {}", idx + 1, lon_s),
-            )
+            Error::invalid_input(format!("Token {}: invalid longitude: {}", idx + 1, lon_s))
         })?;
 
         points.push(LKHNode::new(lat, lon));
     }
 
     if points.is_empty() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "No points provided on stdin.",
-        ));
+        return Err(Error::invalid_input("No points provided on stdin."));
     }
 
     Ok(points)

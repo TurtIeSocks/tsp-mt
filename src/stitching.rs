@@ -110,11 +110,7 @@ impl TourStitcher {
             }
 
             total_swaps += pass_swaps;
-            log::debug!(
-                "stitcher.2opt: pass={} swaps={}",
-                pass_idx + 1,
-                pass_swaps
-            );
+            log::debug!("stitcher.2opt: pass={} swaps={}", pass_idx + 1, pass_swaps);
 
             if pass_swaps == 0 {
                 break;

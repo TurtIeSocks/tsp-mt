@@ -1,6 +1,8 @@
-use std::{env, io};
+use std::env;
 
 use log::LevelFilter;
+
+use crate::{Error, Result};
 
 /// Runtime options for LKH solving behavior.
 #[derive(Clone, Debug)]
@@ -38,7 +40,7 @@ pub enum LogLevel {
 }
 
 impl LogLevel {
-    fn parse(raw: &str) -> io::Result<Self> {
+    fn parse(raw: &str) -> Result<Self> {
         match raw.to_ascii_lowercase().as_str() {
             "error" => Ok(Self::Error),
             "warn" | "warning" => Ok(Self::Warn),
@@ -46,12 +48,9 @@ impl LogLevel {
             "debug" => Ok(Self::Debug),
             "trace" => Ok(Self::Trace),
             "off" => Ok(Self::Off),
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!(
-                    "Invalid value for --log-level: {raw} (expected error|warn|info|debug|trace|off)"
-                ),
-            )),
+            _ => Err(Error::invalid_input(format!(
+                "Invalid value for --log-level: {raw} (expected error|warn|info|debug|trace|off)"
+            ))),
         }
     }
 
@@ -74,14 +73,13 @@ pub enum LogFormat {
 }
 
 impl LogFormat {
-    fn parse(raw: &str) -> io::Result<Self> {
+    fn parse(raw: &str) -> Result<Self> {
         match raw.to_ascii_lowercase().as_str() {
             "compact" => Ok(Self::Compact),
             "pretty" => Ok(Self::Pretty),
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("Invalid value for --log-format: {raw} (expected compact|pretty)"),
-            )),
+            _ => Err(Error::invalid_input(format!(
+                "Invalid value for --log-format: {raw} (expected compact|pretty)"
+            ))),
         }
     }
 }
@@ -104,30 +102,27 @@ impl Default for SolverOptions {
 }
 
 impl SolverOptions {
-    pub fn from_args() -> io::Result<Self> {
+    pub fn from_args() -> Result<Self> {
         let mut options = Self::default();
         let mut args = env::args().skip(1).peekable();
 
         while let Some(arg) = args.next() {
             if arg == "--help" || arg == "-h" {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    Self::usage().to_string(),
-                ));
+                return Err(Error::invalid_input(Self::usage()));
             }
 
             let Some(raw_name) = arg.strip_prefix("--") else {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("Unexpected argument: {arg}\n\n{}", Self::usage()),
-                ));
+                return Err(Error::invalid_input(format!(
+                    "Unexpected argument: {arg}\n\n{}",
+                    Self::usage()
+                )));
             };
 
             if raw_name.is_empty() {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("Invalid option name: {arg}\n\n{}", Self::usage()),
-                ));
+                return Err(Error::invalid_input(format!(
+                    "Invalid option name: {arg}\n\n{}",
+                    Self::usage()
+                )));
             }
 
             let (name, value) = split_arg(raw_name, &mut args);
@@ -156,19 +151,13 @@ impl SolverOptions {
                 }
                 "log-level" => {
                     let raw = value.ok_or_else(|| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("Missing value for --{name}"),
-                        )
+                        Error::invalid_input(format!("Missing value for --{name}"))
                     })?;
                     options.log_level = LogLevel::parse(&raw)?;
                 }
                 "log-format" => {
                     let raw = value.ok_or_else(|| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("Missing value for --{name}"),
-                        )
+                        Error::invalid_input(format!("Missing value for --{name}"))
                     })?;
                     options.log_format = LogFormat::parse(&raw)?;
                 }
@@ -180,27 +169,23 @@ impl SolverOptions {
                 }
                 "no-log-timestamp" => {
                     if value.is_some() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("Flag --{name} does not take a value"),
-                        ));
+                        return Err(Error::invalid_input(format!(
+                            "Flag --{name} does not take a value"
+                        )));
                     }
                     options.log_timestamp = false;
                 }
                 // Handled by SolverInput::from_args; accepted here to allow dual parsing.
                 "lkh-exe" | "work-dir" => {
                     if value.is_none() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("Missing value for --{name}"),
-                        ));
+                        return Err(Error::invalid_input(format!("Missing value for --{name}")));
                     }
                 }
                 _ => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("Unknown option: --{name}\n\n{}", Self::usage()),
-                    ));
+                    return Err(Error::invalid_input(format!(
+                        "Unknown option: --{name}\n\n{}",
+                        Self::usage()
+                    )));
                 }
             }
         }
@@ -240,33 +225,23 @@ impl SolverOptions {
     }
 }
 
-fn parse_value<T>(name: &str, value: Option<String>) -> io::Result<T>
+fn parse_value<T>(name: &str, value: Option<String>) -> Result<T>
 where
     T: std::str::FromStr,
     T::Err: std::fmt::Display,
 {
-    let raw = value.ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("Missing value for --{name}"),
-        )
-    })?;
-    raw.parse::<T>().map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("Invalid value for --{name}: {raw} ({e})"),
-        )
-    })
+    let raw = value.ok_or_else(|| Error::invalid_input(format!("Missing value for --{name}")))?;
+    raw.parse::<T>()
+        .map_err(|e| Error::invalid_input(format!("Invalid value for --{name}: {raw} ({e})")))
 }
 
-fn parse_bool(name: &str, value: &str) -> io::Result<bool> {
+fn parse_bool(name: &str, value: &str) -> Result<bool> {
     match value {
         "1" | "true" | "TRUE" | "True" | "yes" | "YES" | "on" | "ON" => Ok(true),
         "0" | "false" | "FALSE" | "False" | "no" | "NO" | "off" | "OFF" => Ok(false),
-        _ => Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("Invalid boolean for --{name}: {value} (expected true/false)"),
-        )),
+        _ => Err(Error::invalid_input(format!(
+            "Invalid boolean for --{name}: {value} (expected true/false)"
+        ))),
     }
 }
 

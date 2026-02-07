@@ -5,6 +5,7 @@ mod chunked;
 mod config;
 mod constants;
 mod embedded_lkh;
+mod error;
 mod geometry;
 mod h3_chunking;
 mod input;
@@ -20,6 +21,7 @@ mod stitching;
 pub mod utils;
 
 pub use chunked::solve_tsp_with_lkh_h3_chunked;
+pub use error::{Error, Result};
 pub use input::SolverInput;
 pub use node::LKHNode;
 pub use options::SolverOptions;

@@ -1,13 +1,15 @@
-use std::{env, fs, io, path::PathBuf};
+use std::{env, fs, path::PathBuf};
 
 include!(concat!(env!("OUT_DIR"), "/embedded_lkh.rs"));
+
+use crate::Result;
 
 #[cfg(target_os = "windows")]
 const EXECUTABLE_SUFFIX: &str = ".exe";
 #[cfg(not(target_os = "windows"))]
 const EXECUTABLE_SUFFIX: &str = "";
 
-pub(crate) fn ensure_lkh_executable() -> io::Result<PathBuf> {
+pub(crate) fn ensure_lkh_executable() -> Result<PathBuf> {
     let mut path = env::temp_dir();
     path.push(format!("tsp-mt-lkh-{}{}", LKH_VERSION, EXECUTABLE_SUFFIX));
 
@@ -25,14 +27,15 @@ pub(crate) fn ensure_lkh_executable() -> io::Result<PathBuf> {
 }
 
 #[cfg(unix)]
-fn set_executable_permissions(path: &std::path::Path) -> io::Result<()> {
+fn set_executable_permissions(path: &std::path::Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let mut perms = fs::metadata(path)?.permissions();
     perms.set_mode(0o755);
-    fs::set_permissions(path, perms)
+    fs::set_permissions(path, perms)?;
+    Ok(())
 }
 
 #[cfg(not(unix))]
-fn set_executable_permissions(_path: &std::path::Path) -> io::Result<()> {
+fn set_executable_permissions(_path: &std::path::Path) -> Result<()> {
     Ok(())
 }

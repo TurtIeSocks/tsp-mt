@@ -1,5 +1,5 @@
 use std::{
-    fs, io,
+    fs,
     path::{Path, PathBuf},
     process::Command,
     time::Instant,
@@ -8,7 +8,7 @@ use std::{
 use rayon::prelude::*;
 
 use crate::{
-    SolverInput,
+    Error, Result, SolverInput,
     config::LkhConfig,
     constants::{CENTROIDS_FILE, MIN_CYCLE_POINTS, RUN_FILE},
     geometry::TourGeometry,
@@ -42,7 +42,7 @@ impl ChunkSolver {
         work_dir: &PathBuf,
         chunk_points: &[LKHNode],
         options: &SolverOptions,
-    ) -> io::Result<Vec<usize>> {
+    ) -> Result<Vec<usize>> {
         let n = chunk_points.len();
         if n < MIN_CYCLE_POINTS {
             return Ok(chunk_points
@@ -82,7 +82,7 @@ impl ChunkSolver {
         work_dir: &Path,
         centroids: &[LKHNode],
         options: &SolverOptions,
-    ) -> io::Result<Vec<usize>> {
+    ) -> Result<Vec<usize>> {
         if centroids.len() <= MAX_CENTROIDS_WITH_TRIVIAL_ORDER {
             log::debug!(
                 "chunked.order: skip_lkh centroids={} reason=trivial",
@@ -112,7 +112,8 @@ impl ChunkSolver {
         let out = Command::new(lkh_exe)
             .arg(rs.par_path())
             .current_dir(work_dir)
-            .output()?;
+            .output()
+            .map_err(Error::from)?;
         LkhProcess::ensure_success(ERR_CENTROID_ORDERING_FAILED, &out)?;
 
         log::debug!("chunked.order: done centroids={}", centroids.len());
@@ -123,24 +124,15 @@ impl ChunkSolver {
 pub fn solve_tsp_with_lkh_h3_chunked(
     input: SolverInput,
     options: SolverOptions,
-) -> io::Result<Vec<LKHNode>> {
+) -> Result<Vec<LKHNode>> {
     if options.max_chunk_size == 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            ERR_INVALID_MAX_CHUNK_SIZE,
-        ));
+        return Err(Error::invalid_input(ERR_INVALID_MAX_CHUNK_SIZE));
     }
     if options.projection_radius <= 0.0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            ERR_INVALID_PROJECTION_RADIUS,
-        ));
+        return Err(Error::invalid_input(ERR_INVALID_PROJECTION_RADIUS));
     }
     if input.points.iter().any(|p| !p.is_valid()) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            ERR_INVALID_POINT,
-        ));
+        return Err(Error::invalid_input(ERR_INVALID_POINT));
     }
 
     if input.n() <= options.max_chunk_size {
@@ -168,7 +160,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
     let solved_chunk_tours: Vec<Vec<usize>> = chunks
         .par_iter()
         .enumerate()
-        .map(|(chunk_id, idxs)| -> io::Result<Vec<usize>> {
+        .map(|(chunk_id, idxs)| -> Result<Vec<usize>> {
             let chunk_points: Vec<LKHNode> = idxs.iter().map(|&i| input.get_point(i)).collect();
             let chunk_dir = input.work_dir.join(format!("{CHUNK_DIR_PREFIX}{chunk_id}"));
 
@@ -185,7 +177,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(
 
             Ok(tour_global)
         })
-        .collect::<io::Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>>>()?;
 
     let centroids: Vec<LKHNode> = chunks
         .iter()
