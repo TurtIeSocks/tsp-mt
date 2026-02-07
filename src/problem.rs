@@ -22,10 +22,10 @@ impl TsplibProblemWriter {
 
         for (i, p) in points.iter().enumerate() {
             body.push_str(&format!(
-                "{} {:.0} {:.0}\n",
+                "{} {} {}\n",
                 i + TSPLIB_NODE_ID_BASE,
-                p.x * EUC2D_SCALE,
-                p.y * EUC2D_SCALE
+                (p.x * EUC2D_SCALE).round(),
+                (p.y * EUC2D_SCALE).round()
             ));
         }
 

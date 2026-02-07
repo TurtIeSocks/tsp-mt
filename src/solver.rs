@@ -1,4 +1,3 @@
-use rayon::prelude::*;
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -6,6 +5,8 @@ use std::{
     thread,
     time::Instant,
 };
+
+use rayon::prelude::*;
 
 use crate::{
     SolverInput,
