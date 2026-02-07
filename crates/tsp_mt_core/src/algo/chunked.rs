@@ -235,3 +235,57 @@ pub fn solve_tsp_with_lkh_h3_chunked(
 
     Ok(merged.into_iter().map(|i| input.get_point(i)).collect())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::solve_tsp_with_lkh_h3_chunked;
+    use crate::{LKHNode, SolverInput, SolverOptions};
+
+    fn unique_temp_dir(name: &str) -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("tsp-mt-chunked-tests-{name}-{nanos}"))
+    }
+
+    fn sample_input(points: Vec<LKHNode>) -> SolverInput {
+        let work_dir = unique_temp_dir("workdir");
+        SolverInput::new(std::path::Path::new("/bin/false"), &work_dir, &points)
+    }
+
+    #[test]
+    fn solve_chunked_rejects_zero_max_chunk_size() {
+        let input = sample_input(vec![LKHNode::new(10.0, 20.0)]);
+        let options = SolverOptions {
+            max_chunk_size: 0,
+            ..SolverOptions::default()
+        };
+
+        let err = solve_tsp_with_lkh_h3_chunked(input, options).expect_err("must fail");
+        assert!(err.to_string().contains("max_chunk_size must be > 0"));
+    }
+
+    #[test]
+    fn solve_chunked_rejects_non_positive_projection_radius() {
+        let input = sample_input(vec![LKHNode::new(10.0, 20.0)]);
+        let options = SolverOptions {
+            projection_radius: 0.0,
+            ..SolverOptions::default()
+        };
+
+        let err = solve_tsp_with_lkh_h3_chunked(input, options).expect_err("must fail");
+        assert!(err.to_string().contains("projection_radius must be > 0"));
+    }
+
+    #[test]
+    fn solve_chunked_rejects_invalid_lat_lng_points() {
+        let input = sample_input(vec![LKHNode::new(95.0, 20.0)]);
+        let options = SolverOptions::default();
+
+        let err = solve_tsp_with_lkh_h3_chunked(input, options).expect_err("must fail");
+        assert!(err.to_string().contains("invalid lat/lng values"));
+    }
+}

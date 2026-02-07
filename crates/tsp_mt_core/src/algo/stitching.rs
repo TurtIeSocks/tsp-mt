@@ -253,3 +253,102 @@ impl TourStitcher {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::TourStitcher;
+    use crate::{geometry::TourGeometry, node::LKHNode};
+
+    fn sorted(mut values: Vec<usize>) -> Vec<usize> {
+        values.sort_unstable();
+        values
+    }
+
+    #[test]
+    fn stitch_chunk_tours_dense_empty_input_returns_empty_outputs() {
+        let (merged, boundaries) = TourStitcher::stitch_chunk_tours_dense(&[], vec![]);
+        assert!(merged.is_empty());
+        assert!(boundaries.is_empty());
+    }
+
+    #[test]
+    fn merge_two_cycles_dense_keeps_all_nodes_exactly_once() {
+        let coords = vec![
+            LKHNode::new(0.0, 0.0),
+            LKHNode::new(0.0, 1.0),
+            LKHNode::new(1.0, 0.0),
+            LKHNode::new(10.0, 10.0),
+            LKHNode::new(10.0, 11.0),
+            LKHNode::new(11.0, 10.0),
+        ];
+        let tour_a = vec![0, 1, 2];
+        let tour_b = vec![3, 4, 5];
+
+        let result = TourStitcher::merge_two_cycles_dense(&coords, &tour_a, &tour_b);
+        let merged_set: HashSet<usize> = result.merged.iter().copied().collect();
+
+        assert_eq!(result.merged.len(), tour_a.len() + tour_b.len());
+        assert_eq!(merged_set.len(), result.merged.len());
+        assert_eq!(sorted(result.merged), vec![0, 1, 2, 3, 4, 5]);
+        assert!(result.boundaries[0] < 6);
+        assert!(result.boundaries[1] < 6);
+    }
+
+    #[test]
+    fn stitch_chunk_tours_dense_records_boundary_pairs_per_merge() {
+        let coords = vec![
+            LKHNode::new(0.0, 0.0),
+            LKHNode::new(0.0, 1.0),
+            LKHNode::new(1.0, 0.0),
+            LKHNode::new(10.0, 10.0),
+            LKHNode::new(10.0, 11.0),
+            LKHNode::new(11.0, 10.0),
+            LKHNode::new(20.0, 20.0),
+            LKHNode::new(20.0, 21.0),
+            LKHNode::new(21.0, 20.0),
+        ];
+
+        let (merged, boundaries) = TourStitcher::stitch_chunk_tours_dense(
+            &coords,
+            vec![vec![0, 1, 2], vec![3, 4, 5], vec![6, 7, 8]],
+        );
+
+        assert_eq!(merged.len(), 9);
+        assert_eq!(boundaries.len(), 4);
+    }
+
+    #[test]
+    fn boundary_two_opt_skips_when_boundaries_are_empty() {
+        let coords = vec![
+            LKHNode::new(0.0, 0.0),
+            LKHNode::new(2.0, 2.0),
+            LKHNode::new(0.0, 2.0),
+            LKHNode::new(2.0, 0.0),
+        ];
+        let mut tour = vec![0, 1, 2, 3];
+        let original = tour.clone();
+
+        TourStitcher::boundary_two_opt(&coords, &mut tour, &[], 4, 2);
+
+        assert_eq!(tour, original);
+    }
+
+    #[test]
+    fn boundary_two_opt_reduces_length_for_crossing_edges() {
+        let coords = vec![
+            LKHNode::new(0.0, 0.0),
+            LKHNode::new(2.0, 2.0),
+            LKHNode::new(0.0, 2.0),
+            LKHNode::new(2.0, 0.0),
+        ];
+        let mut tour = vec![0, 1, 2, 3];
+        let before = TourGeometry::tour_length(&coords, &tour);
+
+        TourStitcher::boundary_two_opt(&coords, &mut tour, &[1], 4, 3);
+        let after = TourGeometry::tour_length(&coords, &tour);
+
+        assert!(after < before);
+    }
+}
