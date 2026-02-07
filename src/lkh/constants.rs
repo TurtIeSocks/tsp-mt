@@ -1,10 +1,10 @@
 pub(crate) const MIN_CYCLE_POINTS: usize = 3;
 
-pub(crate) const PAR_EXTENSION: &str = ".par";
-pub(crate) const TOUR_EXTENSION: &str = ".tour";
-pub(crate) const TSP_EXTENSION: &str = ".tsp";
-pub(crate) const CANDIDATE_EXTENSION: &str = ".cand";
-pub(crate) const PI_EXTENSION: &str = ".pi";
+const PAR_EXTENSION: &str = ".par";
+const TOUR_EXTENSION: &str = ".tour";
+const TSP_EXTENSION: &str = ".tsp";
+const CANDIDATE_EXTENSION: &str = ".cand";
+const PI_EXTENSION: &str = ".pi";
 
 pub(crate) struct File {
     name: &'static str,
