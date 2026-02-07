@@ -2,6 +2,7 @@ use std::{
     env,
     io::Read,
     path::{Path, PathBuf},
+    process,
 };
 use tsp_mt_derive::{CliOptions, KvDisplay};
 
@@ -30,10 +31,9 @@ impl SolverInput {
     }
 
     pub fn from_args() -> Result<Self> {
-        let current = env::current_dir()?;
         let mut input = Self {
             lkh_exe: PathBuf::new(),
-            work_dir: current.join(".temp"),
+            work_dir: default_work_dir(),
             points: Vec::new(),
         };
         let mut saw_lkh_exe = false;
@@ -87,6 +87,10 @@ impl SolverInput {
     pub(crate) fn get_point(&self, idx: usize) -> LKHNode {
         self.points[idx]
     }
+}
+
+fn default_work_dir() -> PathBuf {
+    env::temp_dir().join(format!("tsp-mt-{}", process::id()))
 }
 
 fn read_points_from_stdin() -> Result<Vec<LKHNode>> {
