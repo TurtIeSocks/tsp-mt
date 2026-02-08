@@ -144,7 +144,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(input: SolverInput, options: SolverOptions)
     if options.projection_radius <= 0.0 {
         return Err(Error::invalid_input(ERR_INVALID_PROJECTION_RADIUS));
     }
-    if input.points.iter().any(|p| !p.is_valid()) {
+    if input.nodes.iter().any(|p| !p.is_valid()) {
         return Err(Error::invalid_input(ERR_INVALID_POINT));
     }
 
@@ -157,11 +157,11 @@ pub fn solve_tsp_with_lkh_h3_chunked(input: SolverInput, options: SolverOptions)
         return crate::solve_tsp_with_lkh_parallel(input, options);
     }
 
-    let global_coords = PlaneProjection::new(&input.points)
+    let global_coords = PlaneProjection::new(&input.nodes)
         .radius(options.projection_radius)
         .project();
 
-    let chunks = h3_chunking::partition_indices(&input.points, options.max_chunk_size)?;
+    let chunks = h3_chunking::partition_indices(&input.nodes, options.max_chunk_size)?;
     log::info!(
         "chunker: partitioned n={} chunks={} max_chunk_size={}",
         input.n(),

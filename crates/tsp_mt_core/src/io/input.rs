@@ -7,36 +7,36 @@ use crate::{Error, LKHNode, Result};
 #[derive(Clone, Debug, KvDisplay)]
 pub struct SolverInput {
     #[kv(fmt = "len")]
-    pub(crate) points: Vec<LKHNode>,
+    pub(crate) nodes: Vec<LKHNode>,
 }
 
 impl SolverInput {
     pub fn new(points: &[LKHNode]) -> Self {
         Self {
-            points: points.to_vec(),
+            nodes: points.to_vec(),
         }
     }
 
     pub fn from_args() -> Result<Self> {
         Ok(Self {
-            points: read_points_from_stdin()?,
+            nodes: from_stdin()?,
         })
     }
 
     pub fn points_len(&self) -> usize {
-        self.points.len()
+        self.nodes.len()
     }
 
     pub(crate) fn n(&self) -> usize {
-        self.points.len()
+        self.nodes.len()
     }
 
     pub(crate) fn get_point(&self, idx: usize) -> LKHNode {
-        self.points[idx]
+        self.nodes[idx]
     }
 }
 
-fn read_points_from_stdin() -> Result<Vec<LKHNode>> {
+fn from_stdin() -> Result<Vec<LKHNode>> {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input)?;
     parse_points(&input)

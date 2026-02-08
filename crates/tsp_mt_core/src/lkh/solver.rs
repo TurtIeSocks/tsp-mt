@@ -195,14 +195,14 @@ pub fn solve_tsp_with_lkh_parallel(input: SolverInput, options: SolverOptions) -
     if options.projection_radius <= 0.0 {
         return Err(Error::invalid_input(ERR_INVALID_PROJECTION_RADIUS));
     }
-    if input.points.iter().any(|p| !p.is_valid()) {
+    if input.nodes.iter().any(|p| !p.is_valid()) {
         return Err(Error::invalid_input(ERR_INVALID_POINT));
     }
 
     let solver = LkhSolver::new(&options.lkh_exe, &options.work_dir);
     solver.create_work_dir()?;
 
-    let points = PlaneProjection::new(&input.points)
+    let points = PlaneProjection::new(&input.nodes)
         .radius(options.projection_radius)
         .project();
 
