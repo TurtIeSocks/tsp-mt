@@ -8,18 +8,9 @@ use std::{
 use rayon::prelude::*;
 
 use crate::{
-    Error, Result, SolverInput, Tour,
-    config::LkhConfig,
-    constants::{CENTROIDS_FILE, MIN_CYCLE_POINTS, RUN_FILE},
-    file_cleanup, geometry, h3_chunking,
-    node::LKHNode,
-    options::SolverOptions,
-    problem::TsplibProblemWriter,
-    process::LkhProcess,
-    projection::PlaneProjection,
-    run_spec::RunSpec,
-    solver::LkhSolver,
-    stitching,
+    Error, Result, SolverInput, Tour, config::LkhConfig, constants::MIN_CYCLE_POINTS, file_cleanup,
+    geometry, h3_chunking, node::LKHNode, options::SolverOptions, problem::TsplibProblemWriter,
+    process::LkhProcess, projection::PlaneProjection, solver::LkhSolver, stitching,
 };
 
 const RUN_INDEX_SINGLE: usize = 0;
@@ -27,17 +18,26 @@ const MAX_CENTROIDS_WITH_TRIVIAL_ORDER: usize = 2;
 const CHUNK_DIR_PREFIX: &str = "chunk_";
 const CHUNK_ORDER_DIR: &str = "chunk_order";
 
+const CENTROIDS_BASENAME: &str = "centroids";
+const PAR_EXTENSION: &str = ".par";
+const TOUR_EXTENSION: &str = ".tour";
+const TSP_EXTENSION: &str = ".tsp";
+
 const ERR_LKH_CHUNK_FAILED: &str = "LKH chunk failed";
 const ERR_CENTROID_ORDERING_FAILED: &str = "Centroid ordering LKH failed";
 const ERR_INVALID_POINT: &str = "Input contains invalid lat/lng values";
 const ERR_INVALID_PROJECTION_RADIUS: &str = "projection_radius must be > 0";
 const ERR_INVALID_MAX_CHUNK_SIZE: &str = "max_chunk_size must be > 0";
 
+fn file_name(stem: &str, extension: &str) -> String {
+    format!("{stem}{extension}")
+}
+
 struct ChunkSolver(PathBuf);
 
 impl Drop for ChunkSolver {
     fn drop(&mut self) {
-        log::info!("Dropping chunksolver");
+        // log::debug!("Dropping chunksolver");
         file_cleanup::cleanup_workdir(&self.0)
     }
 }
@@ -64,7 +64,6 @@ impl ChunkSolver {
                 .collect());
         }
 
-        let cfg = LkhConfig::new(n);
         let solver = LkhSolver::new(lkh_exe, work_dir);
         solver.create_work_dir()?;
 
@@ -73,20 +72,19 @@ impl ChunkSolver {
             .project();
 
         solver.create_problem_file(&pts)?;
-        // solver.ensure_candidate_file(pts.len())?;
 
-        let rs = RunSpec::new(
-            RUN_INDEX_SINGLE,
-            cfg.base_seed(),
-            solver.work_dir().join(RUN_FILE.par_idx(RUN_INDEX_SINGLE)),
-            solver.work_dir().join(RUN_FILE.tour_idx(RUN_INDEX_SINGLE)),
-        );
-        rs.write_lkh_par(&cfg, &solver)?;
+        let cfg = solver.parallel_run_config(n);
+        let run_par = solver.run_par_path(RUN_INDEX_SINGLE);
+        let run_tour = solver.run_tour_path(RUN_INDEX_SINGLE);
+        let seed = cfg.base_seed();
+        let run_cfg = cfg.with_seed(seed).with_output_tour_file(&run_tour);
 
-        let out = solver.run(rs.par_path())?;
+        run_cfg.write_to_file(&run_par)?;
+
+        let out = solver.run(&run_par)?;
         LkhProcess::ensure_success(ERR_LKH_CHUNK_FAILED, &out)?;
 
-        rs.parse_tsplib_tour(n)
+        LkhProcess::parse_tsplib_tour(&run_tour, n)
     }
 
     fn order_by_centroid_tsp(
@@ -107,30 +105,31 @@ impl ChunkSolver {
         log::debug!("chunked.order: start centroids={}", centroids.len());
         fs::create_dir_all(work_dir)?;
 
-        let problem = work_dir.join(CENTROIDS_FILE.tsp());
-        TsplibProblemWriter::write_euc2d(&problem, CENTROIDS_FILE.name(), centroids)?;
+        let problem = work_dir.join(file_name(CENTROIDS_BASENAME, TSP_EXTENSION));
+        TsplibProblemWriter::write_euc2d(&problem, CENTROIDS_BASENAME, centroids)?;
 
-        let rs = RunSpec::new(
-            RUN_INDEX_SINGLE,
-            options.centroid_order_seed,
-            work_dir.join(CENTROIDS_FILE.par()),
-            work_dir.join(CENTROIDS_FILE.tour()),
-        );
-        rs.write_lkh_par_small(
+        let par_path = work_dir.join(file_name(CENTROIDS_BASENAME, PAR_EXTENSION));
+        let tour_path = work_dir.join(file_name(CENTROIDS_BASENAME, TOUR_EXTENSION));
+
+        let cfg = LkhConfig::for_small_problem(
             &problem,
             options.centroid_order_max_trials,
             options.centroid_order_time_limit,
-        )?;
+        )
+        .with_seed(options.centroid_order_seed)
+        .with_output_tour_file(&tour_path);
+
+        cfg.write_to_file(&par_path)?;
 
         let out = Command::new(lkh_exe)
-            .arg(rs.par_path())
+            .arg(&par_path)
             .current_dir(work_dir)
             .output()
             .map_err(Error::from)?;
         LkhProcess::ensure_success(ERR_CENTROID_ORDERING_FAILED, &out)?;
 
         log::debug!("chunked.order: done centroids={}", centroids.len());
-        rs.parse_tsplib_tour(centroids.len())
+        LkhProcess::parse_tsplib_tour(&tour_path, centroids.len())
     }
 }
 
