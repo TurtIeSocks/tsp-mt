@@ -2,6 +2,31 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, LitStr, parse_macro_input, spanned::Spanned};
 
+fn default_lkh_value(variant_ident: &syn::Ident) -> String {
+    let name = variant_ident.to_string();
+    let chars: Vec<char> = name.chars().collect();
+    let mut out = String::with_capacity(chars.len() * 2);
+
+    for (idx, ch) in chars.iter().copied().enumerate() {
+        if idx > 0 {
+            let prev = chars[idx - 1];
+            let next = chars.get(idx + 1).copied();
+            let is_word_boundary = ch.is_ascii_uppercase()
+                && (prev.is_ascii_lowercase()
+                    || prev.is_ascii_digit()
+                    || (prev.is_ascii_uppercase() && next.is_some_and(|n| n.is_ascii_lowercase())));
+
+            if is_word_boundary {
+                out.push('-');
+            }
+        }
+
+        out.push(ch.to_ascii_uppercase());
+    }
+
+    out
+}
+
 pub fn derive_as_lkh_inner(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     let enum_ident = input.ident.clone();
@@ -52,14 +77,15 @@ pub fn derive_as_lkh_inner(item: TokenStream) -> TokenStream {
             };
             mappings.push((pat, value));
         }
-
         if mappings.is_empty() {
-            return syn::Error::new(
-                variant.span(),
-                "missing #[lkh(...)] mapping for enum variant",
-            )
-            .to_compile_error()
-            .into();
+            let capitalize = default_lkh_value(&variant_ident);
+            mappings.push((None, LitStr::new(&capitalize, variant_ident.span())));
+            //     return syn::Error::new(
+            //         variant.span(),
+            //         "missing #[lkh(...)] mapping for enum variant",
+            //     )
+            //     .to_compile_error()
+            //     .into();
         }
 
         for (pat_lit, value_lit) in mappings {
@@ -108,4 +134,32 @@ pub fn derive_as_lkh_inner(item: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_lkh_value;
+    use quote::format_ident;
+
+    #[test]
+    fn uppercases_single_word() {
+        assert_eq!(default_lkh_value(&format_ident!("Delaunay")), "DELAUNAY");
+    }
+
+    #[test]
+    fn splits_pascal_case_with_dash() {
+        assert_eq!(default_lkh_value(&format_ident!("KMeans")), "K-MEANS");
+        assert_eq!(
+            default_lkh_value(&format_ident!("NearestNeighbor")),
+            "NEAREST-NEIGHBOR"
+        );
+    }
+
+    #[test]
+    fn keeps_acronyms_intact() {
+        assert_eq!(
+            default_lkh_value(&format_ident!("XMLHttpRequest")),
+            "XML-HTTP-REQUEST"
+        );
+    }
 }

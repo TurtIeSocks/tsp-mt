@@ -32,9 +32,7 @@ const DEFAULT_BASE_SEED: u64 = 12_345;
 /// Yes/No wrapper for LKH parameters expressed as `[ YES | NO ]`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, AsLkh)]
 pub(crate) enum YesNo {
-    #[lkh("YES")]
     Yes,
-    #[lkh("NO")]
     No,
 }
 
@@ -47,49 +45,38 @@ impl From<bool> for YesNo {
 /// LKH-2.0 `CANDIDATE_SET_TYPE` values.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, AsLkh)]
 pub(crate) enum CandidateSetType {
-    #[lkh("ALPHA")]
     Alpha,
     #[lkh(value = "DELAUNAY", pat = "{ pure: false }")]
     #[lkh(value = "DELAUNAY PURE", pat = "{ pure: true }")]
-    Delaunay { pure: bool },
-    #[lkh("NEAREST-NEIGHBOR")]
+    Delaunay {
+        pure: bool,
+    },
     NearestNeighbor,
-    #[lkh("QUADRANT")]
     Quadrant,
 }
 
 /// LKH-2.0 `EXTRA_CANDIDATE_SET_TYPE` values.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, AsLkh)]
 pub(crate) enum ExtraCandidateSetType {
-    #[lkh("NEAREST-NEIGHBOR")]
     NearestNeighbor,
-    #[lkh("QUADRANT")]
     Quadrant,
 }
 
 /// LKH-2.0 `INITIAL_TOUR_ALGORITHM` values.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, AsLkh)]
 pub(crate) enum InitialTourAlgorithm {
-    #[lkh("BORUVKA")]
     Boruvka,
-    #[lkh("GREEDY")]
     Greedy,
-    #[lkh("NEAREST-NEIGHBOR")]
     NearestNeighbor,
-    #[lkh("QUICK-BORUVKA")]
     QuickBoruvka,
-    #[lkh("SIERPINSKI")]
     Sierpinski,
-    #[lkh("WALK")]
     Walk,
 }
 
 /// LKH-2.0 `PATCHING_A` / `PATCHING_C` option modifiers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, AsLkh)]
 pub(crate) enum PatchingRuleMode {
-    #[lkh("RESTRICTED")]
     Restricted,
-    #[lkh("EXTENDED")]
     Extended,
 }
 
@@ -122,15 +109,11 @@ impl PatchingRule {
 /// LKH-2.0 `SUBPROBLEM_SIZE` partitioning modes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, AsLkh)]
 pub(crate) enum SubproblemPartitioning {
-    #[lkh("DELAUNAY")]
     Delaunay,
-    #[lkh("KARP")]
     Karp,
     #[lkh("K-MEANS")]
     KMeans,
-    #[lkh("ROHE")]
     Rohe,
-    #[lkh("SIERPINSKI")]
     Sierpinski,
 }
 
