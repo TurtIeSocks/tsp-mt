@@ -9,6 +9,7 @@ use std::{
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
 use crate::Result;
+use tsp_mt_derive::AsLkh;
 
 const MAX_TRIALS_MULTIPLIER: usize = 3;
 const MIN_MAX_TRIALS: usize = 1_000;
@@ -29,19 +30,12 @@ const DEFAULT_MAX_CANDIDATES: usize = 32;
 const DEFAULT_BASE_SEED: u64 = 12_345;
 
 /// Yes/No wrapper for LKH parameters expressed as `[ YES | NO ]`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, AsLkh)]
 pub(crate) enum YesNo {
+    #[lkh("YES")]
     Yes,
+    #[lkh("NO")]
     No,
-}
-
-impl YesNo {
-    fn as_lkh(self) -> &'static str {
-        match self {
-            Self::Yes => "YES",
-            Self::No => "NO",
-        }
-    }
 }
 
 impl From<bool> for YesNo {
@@ -51,80 +45,52 @@ impl From<bool> for YesNo {
 }
 
 /// LKH-2.0 `CANDIDATE_SET_TYPE` values.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, AsLkh)]
 pub(crate) enum CandidateSetType {
+    #[lkh("ALPHA")]
     Alpha,
+    #[lkh(value = "DELAUNAY", pat = "{ pure: false }")]
+    #[lkh(value = "DELAUNAY PURE", pat = "{ pure: true }")]
     Delaunay { pure: bool },
+    #[lkh("NEAREST-NEIGHBOR")]
     NearestNeighbor,
+    #[lkh("QUADRANT")]
     Quadrant,
-}
-
-impl CandidateSetType {
-    fn as_lkh(self) -> &'static str {
-        match self {
-            Self::Alpha => "ALPHA",
-            Self::Delaunay { pure: false } => "DELAUNAY",
-            Self::Delaunay { pure: true } => "DELAUNAY PURE",
-            Self::NearestNeighbor => "NEAREST-NEIGHBOR",
-            Self::Quadrant => "QUADRANT",
-        }
-    }
 }
 
 /// LKH-2.0 `EXTRA_CANDIDATE_SET_TYPE` values.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, AsLkh)]
 pub(crate) enum ExtraCandidateSetType {
+    #[lkh("NEAREST-NEIGHBOR")]
     NearestNeighbor,
+    #[lkh("QUADRANT")]
     Quadrant,
 }
 
-impl ExtraCandidateSetType {
-    fn as_lkh(self) -> &'static str {
-        match self {
-            Self::NearestNeighbor => "NEAREST-NEIGHBOR",
-            Self::Quadrant => "QUADRANT",
-        }
-    }
-}
-
 /// LKH-2.0 `INITIAL_TOUR_ALGORITHM` values.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, AsLkh)]
 pub(crate) enum InitialTourAlgorithm {
+    #[lkh("BORUVKA")]
     Boruvka,
+    #[lkh("GREEDY")]
     Greedy,
+    #[lkh("NEAREST-NEIGHBOR")]
     NearestNeighbor,
+    #[lkh("QUICK-BORUVKA")]
     QuickBoruvka,
+    #[lkh("SIERPINSKI")]
     Sierpinski,
+    #[lkh("WALK")]
     Walk,
 }
 
-impl InitialTourAlgorithm {
-    fn as_lkh(self) -> &'static str {
-        match self {
-            Self::Boruvka => "BORUVKA",
-            Self::Greedy => "GREEDY",
-            Self::NearestNeighbor => "NEAREST-NEIGHBOR",
-            Self::QuickBoruvka => "QUICK-BORUVKA",
-            Self::Sierpinski => "SIERPINSKI",
-            Self::Walk => "WALK",
-        }
-    }
-}
-
 /// LKH-2.0 `PATCHING_A` / `PATCHING_C` option modifiers.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, AsLkh)]
 pub(crate) enum PatchingRuleMode {
+    #[lkh("RESTRICTED")]
     Restricted,
+    #[lkh("EXTENDED")]
     Extended,
-}
-
-impl PatchingRuleMode {
-    fn as_lkh(self) -> &'static str {
-        match self {
-            Self::Restricted => "RESTRICTED",
-            Self::Extended => "EXTENDED",
-        }
-    }
 }
 
 /// LKH candidate count with optional `SYMMETRIC` modifier.
@@ -154,25 +120,18 @@ impl PatchingRule {
 }
 
 /// LKH-2.0 `SUBPROBLEM_SIZE` partitioning modes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, AsLkh)]
 pub(crate) enum SubproblemPartitioning {
+    #[lkh("DELAUNAY")]
     Delaunay,
+    #[lkh("KARP")]
     Karp,
+    #[lkh("K-MEANS")]
     KMeans,
+    #[lkh("ROHE")]
     Rohe,
+    #[lkh("SIERPINSKI")]
     Sierpinski,
-}
-
-impl SubproblemPartitioning {
-    fn as_lkh(self) -> &'static str {
-        match self {
-            Self::Delaunay => "DELAUNAY",
-            Self::Karp => "KARP",
-            Self::KMeans => "K-MEANS",
-            Self::Rohe => "ROHE",
-            Self::Sierpinski => "SIERPINSKI",
-        }
-    }
 }
 
 /// Composite value for the `SUBPROBLEM_SIZE` parameter.
