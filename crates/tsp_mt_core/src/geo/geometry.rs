@@ -29,7 +29,7 @@ impl TourGeometry {
             sy += coords[i].y;
         }
         let n = idxs.len().max(1) as f64;
-        LKHNode::new(sy / n, sx / n)
+        LKHNode::from_lat_lng(sy / n, sx / n)
     }
 
     pub(crate) fn rotate_cycle(tour: &[usize], start_node: usize) -> Vec<usize> {
@@ -50,18 +50,18 @@ mod tests {
 
     #[test]
     fn dist_uses_euclidean_metric() {
-        let a = LKHNode::new(0.0, 0.0);
-        let b = LKHNode::new(4.0, 3.0);
+        let a = LKHNode::from_lat_lng(0.0, 0.0);
+        let b = LKHNode::from_lat_lng(4.0, 3.0);
         assert!((TourGeometry::dist(a, b) - 5.0).abs() < 1e-12);
     }
 
     #[test]
     fn tour_length_closes_cycle() {
         let points = vec![
-            LKHNode::new(0.0, 0.0),
-            LKHNode::new(0.0, 1.0),
-            LKHNode::new(1.0, 1.0),
-            LKHNode::new(1.0, 0.0),
+            LKHNode::from_lat_lng(0.0, 0.0),
+            LKHNode::from_lat_lng(0.0, 1.0),
+            LKHNode::from_lat_lng(1.0, 1.0),
+            LKHNode::from_lat_lng(1.0, 0.0),
         ];
         let tour = vec![0, 1, 2, 3];
         let length = TourGeometry::tour_length(&points, &tour);
@@ -71,9 +71,9 @@ mod tests {
     #[test]
     fn centroid_of_indices_averages_coordinates() {
         let coords = vec![
-            LKHNode::new(2.0, 1.0),
-            LKHNode::new(4.0, 3.0),
-            LKHNode::new(6.0, 5.0),
+            LKHNode::from_lat_lng(2.0, 1.0),
+            LKHNode::from_lat_lng(4.0, 3.0),
+            LKHNode::from_lat_lng(6.0, 5.0),
         ];
         let centroid = TourGeometry::centroid_of_indices(&coords, &[0, 2]);
         assert!((centroid.y - 4.0).abs() < 1e-12);

@@ -258,7 +258,7 @@ mod tests {
 
     #[test]
     fn solve_chunked_rejects_zero_max_chunk_size() {
-        let input = sample_input(vec![LKHNode::new(10.0, 20.0)]);
+        let input = sample_input(vec![LKHNode::from_lat_lng(10.0, 20.0)]);
         let options = SolverOptions {
             max_chunk_size: 0,
             ..SolverOptions::default()
@@ -270,7 +270,7 @@ mod tests {
 
     #[test]
     fn solve_chunked_rejects_non_positive_projection_radius() {
-        let input = sample_input(vec![LKHNode::new(10.0, 20.0)]);
+        let input = sample_input(vec![LKHNode::from_lat_lng(10.0, 20.0)]);
         let options = SolverOptions {
             projection_radius: 0.0,
             ..SolverOptions::default()
@@ -282,7 +282,7 @@ mod tests {
 
     #[test]
     fn solve_chunked_rejects_invalid_lat_lng_points() {
-        let input = sample_input(vec![LKHNode::new(95.0, 20.0)]);
+        let input = sample_input(vec![LKHNode::from_lat_lng(95.0, 20.0)]);
         let options = SolverOptions::default();
 
         let err = solve_tsp_with_lkh_h3_chunked(input, options).expect_err("must fail");

@@ -79,7 +79,7 @@ impl PlaneProjection {
             .iter()
             .map(|p| {
                 let scale = global_scale / self.dot_product(*p, self.z);
-                LKHNode::new(
+                LKHNode::from_lat_lng(
                     self.dot_product(*p, self.y) * scale,
                     self.dot_product(*p, self.x) * scale - offset_x,
                 )
@@ -135,9 +135,9 @@ mod tests {
     #[test]
     fn project_preserves_point_count_and_returns_finite_coordinates() {
         let input = vec![
-            LKHNode::new(37.7749, -122.4194),
-            LKHNode::new(34.0522, -118.2437),
-            LKHNode::new(40.7128, -74.0060),
+            LKHNode::from_lat_lng(37.7749, -122.4194),
+            LKHNode::from_lat_lng(34.0522, -118.2437),
+            LKHNode::from_lat_lng(40.7128, -74.0060),
         ];
 
         let projected = PlaneProjection::new(&input).radius(70.0).project();
@@ -149,8 +149,8 @@ mod tests {
     #[test]
     fn project_same_input_is_deterministic() {
         let input = vec![
-            LKHNode::new(48.8566, 2.3522),
-            LKHNode::new(51.5074, -0.1278),
+            LKHNode::from_lat_lng(48.8566, 2.3522),
+            LKHNode::from_lat_lng(51.5074, -0.1278),
         ];
 
         let a = PlaneProjection::new(&input).radius(100.0).project();

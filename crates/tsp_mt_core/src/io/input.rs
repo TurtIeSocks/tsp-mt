@@ -137,7 +137,7 @@ fn parse_points(input: &str) -> Result<Vec<LKHNode>> {
             Error::invalid_input(format!("Token {}: invalid longitude: {}", idx + 1, lon_s))
         })?;
 
-        points.push(LKHNode::new(lat, lon));
+        points.push(LKHNode::from_lat_lng(lat, lon));
     }
 
     if points.is_empty() {
