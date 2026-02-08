@@ -8,7 +8,7 @@ use std::{
 use log::info;
 
 use tsp_mt_core::{
-    Result, SolverInput, SolverOptions, logging, solve_tsp_with_lkh_h3_chunked, utils,
+    Result, SolverInput, SolverOptions, logging, solve_tsp_with_lkh_h3_chunked,
 };
 
 fn main() -> Result<()> {
@@ -35,10 +35,9 @@ fn main_inner(options: SolverOptions) -> Result<()> {
     info!("input: {input}");
     info!("options: {options}");
 
-    let route = solve_tsp_with_lkh_h3_chunked(input, options)?;
-    write_route_output(&route, output_path.as_deref())?;
-
-    utils::tour_distance(&route);
+    let tour = solve_tsp_with_lkh_h3_chunked(input, options)?;
+    write_route_output(&tour.nodes, output_path.as_deref())?;
+    tour.tour_metrics(10.0);
 
     Ok(())
 }

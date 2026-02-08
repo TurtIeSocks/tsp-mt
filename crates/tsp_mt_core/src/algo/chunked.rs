@@ -8,9 +8,10 @@ use std::{
 use rayon::prelude::*;
 
 use crate::{
-    Error, Result, SolverInput,
+    Error, Result, SolverInput, Tour,
     config::LkhConfig,
     constants::{CENTROIDS_FILE, MIN_CYCLE_POINTS, RUN_FILE},
+    file_cleanup,
     geometry::TourGeometry,
     h3_chunking::H3Chunker,
     node::LKHNode,
@@ -21,7 +22,6 @@ use crate::{
     run_spec::RunSpec,
     solver::LkhSolver,
     stitching::TourStitcher,
-    utils,
 };
 
 const RUN_INDEX_SINGLE: usize = 0;
@@ -40,13 +40,13 @@ struct ChunkSolver(PathBuf);
 impl Drop for ChunkSolver {
     fn drop(&mut self) {
         log::info!("Dropping chunksolver");
-        utils::cleanup_workdir(&self.0)
+        file_cleanup::cleanup_workdir(&self.0)
     }
 }
 
 impl ChunkSolver {
     fn new(work_dir: &Path) -> Self {
-        utils::register_workdir_for_shutdown_cleanup(work_dir);
+        file_cleanup::register_workdir_for_shutdown_cleanup(work_dir);
         Self(work_dir.to_path_buf())
     }
 
@@ -137,10 +137,7 @@ impl ChunkSolver {
 }
 
 #[tsp_mt_derive::timer("chunked")]
-pub fn solve_tsp_with_lkh_h3_chunked(
-    input: SolverInput,
-    options: SolverOptions,
-) -> Result<Vec<LKHNode>> {
+pub fn solve_tsp_with_lkh_h3_chunked(input: SolverInput, options: SolverOptions) -> Result<Tour> {
     // cleans up workdir on drop
     let chunk_solver = ChunkSolver::new(&input.work_dir);
 
@@ -233,7 +230,9 @@ pub fn solve_tsp_with_lkh_h3_chunked(
         chunks.len()
     );
 
-    Ok(merged.into_iter().map(|i| input.get_point(i)).collect())
+    Ok(Tour::new(
+        merged.into_iter().map(|i| input.get_point(i)).collect(),
+    ))
 }
 
 #[cfg(test)]

@@ -8,9 +8,10 @@ use std::{
 use rayon::prelude::*;
 
 use crate::{
-    Error, Result, SolverInput,
+    Error, Result, SolverInput, Tour,
     config::LkhConfig,
     constants::{MIN_CYCLE_POINTS, PREP_CANDIDATES_FILE, PROBLEM_FILE, RUN_FILE},
+    file_cleanup,
     geometry::TourGeometry,
     node::LKHNode,
     options::SolverOptions,
@@ -18,7 +19,6 @@ use crate::{
     process::LkhProcess,
     projection::PlaneProjection,
     run_spec::RunSpec,
-    utils,
 };
 
 const PREP_RUN_INDEX: usize = 0;
@@ -134,11 +134,8 @@ PI_FILE = {}
 /// Solve TSP by spawning multiple LKH processes in parallel with different SEEDs.
 /// Returns best tour points.
 #[tsp_mt_derive::timer("solver")]
-pub fn solve_tsp_with_lkh_parallel(
-    input: SolverInput,
-    options: SolverOptions,
-) -> Result<Vec<LKHNode>> {
-    utils::register_workdir_for_shutdown_cleanup(&input.work_dir);
+pub fn solve_tsp_with_lkh_parallel(input: SolverInput, options: SolverOptions) -> Result<Tour> {
+    file_cleanup::register_workdir_for_shutdown_cleanup(&input.work_dir);
 
     if input.n() < MIN_CYCLE_POINTS {
         return Err(Error::invalid_input(format!(
@@ -217,9 +214,11 @@ pub fn solve_tsp_with_lkh_parallel(
         best.1
     );
 
-    utils::cleanup_workdir(&input.work_dir);
+    file_cleanup::cleanup_workdir(&input.work_dir);
 
-    Ok(best.0.into_iter().map(|idx| input.get_point(idx)).collect())
+    Ok(Tour::new(
+        best.0.into_iter().map(|idx| input.get_point(idx)).collect(),
+    ))
 }
 
 #[cfg(test)]

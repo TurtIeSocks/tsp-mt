@@ -5,8 +5,6 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-use crate::LKHNode;
-
 static SHUTDOWN_WORKDIRS: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
 static SHUTDOWN_HOOK_INSTALLED: OnceLock<()> = OnceLock::new();
 
@@ -63,51 +61,6 @@ pub(crate) fn cleanup_workdir(work_dir: &Path) {
     }
 }
 
-pub fn tour_distance(points: &[LKHNode]) -> (f64, f64, i32) {
-    if points.len() < 2 {
-        log::info!(
-            "metrics: n={} total_m=0 longest_m=0 avg_m=0 spike_threshold_m=0 spikes=0",
-            points.len()
-        );
-        return (0.0, 0.0, 0);
-    }
-
-    let mut total = 0.0;
-    let mut longest = 0.0;
-    let n = points.len();
-
-    // OPEN: only edges i -> i+1
-    for i in 0..(points.len() - 1) {
-        let d = points[i].dist(&points[i + 1]);
-        total += d;
-        if d > longest {
-            longest = d;
-        }
-    }
-    let avg_edge = total / ((points.len() - 1) as f64);
-    let threshold = avg_edge * 10.0;
-
-    // Spike threshold: 10× average edge length (OPEN edges count = n-1)
-    let mut spikes = 0;
-    for i in 0..(points.len() - 1) {
-        let d_l = points[i].dist(&points[(i + 1) % n]);
-        if d_l > threshold {
-            spikes += 1;
-        }
-        // let d_r = points[i].dist(&points[(i - 1) % n]);
-        // if d_l > threshold && d_r > threshold {
-        //     spikes += 1;
-        // }
-    }
-
-    log::info!(
-        "metrics: n={} total_m={total:.0} longest_m={longest:.0} avg_m={avg_edge:.0} spike_threshold_m={threshold:.0} spikes={spikes}",
-        points.len()
-    );
-
-    (total, longest, spikes)
-}
-
 #[cfg(test)]
 mod tests {
     use std::{
@@ -115,8 +68,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{cleanup_workdir, tour_distance};
-    use crate::LKHNode;
+    use super::cleanup_workdir;
 
     fn unique_temp_dir(name: &str) -> std::path::PathBuf {
         let nanos = SystemTime::now()
@@ -142,31 +94,5 @@ mod tests {
         let dir = unique_temp_dir("missing");
         cleanup_workdir(&dir);
         assert!(!dir.exists());
-    }
-
-    #[test]
-    fn tour_distance_for_short_inputs_is_zeroed() {
-        let empty: Vec<LKHNode> = vec![];
-        let one = vec![LKHNode::new(0.0, 0.0)];
-
-        assert_eq!(tour_distance(&empty), (0.0, 0.0, 0));
-        assert_eq!(tour_distance(&one), (0.0, 0.0, 0));
-    }
-
-    #[test]
-    fn tour_distance_matches_open_path_sum_and_longest_edge() {
-        let pts = vec![
-            LKHNode::new(0.0, 0.0),
-            LKHNode::new(0.0, 1.0),
-            LKHNode::new(0.0, 2.0),
-        ];
-        let d1 = pts[0].dist(&pts[1]);
-        let d2 = pts[1].dist(&pts[2]);
-
-        let (total, longest, spikes) = tour_distance(&pts);
-
-        assert!((total - (d1 + d2)).abs() < 1e-6);
-        assert!((longest - d1.max(d2)).abs() < 1e-6);
-        assert_eq!(spikes, 0);
     }
 }

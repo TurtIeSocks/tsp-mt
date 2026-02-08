@@ -9,7 +9,8 @@ mod io;
 mod lkh;
 pub mod logging;
 mod node;
-pub mod utils;
+mod tour;
+pub mod file_cleanup;
 
 pub(crate) use algo::{h3_chunking, stitching};
 pub(crate) use geo::{geometry, projection};
@@ -22,3 +23,4 @@ pub use io::input::SolverInput;
 pub use io::options::SolverOptions;
 pub use lkh::solver::solve_tsp_with_lkh_parallel;
 pub use node::LKHNode;
+pub use tour::Tour;
