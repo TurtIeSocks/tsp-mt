@@ -6,6 +6,7 @@ type Precision = f64;
 type Geocentric = (Precision, Precision, Precision);
 type Topocentric = (Precision, Precision);
 
+#[derive(Default)]
 pub(crate) struct PlaneProjection {
     center: Geocentric,
     x: Geocentric,
@@ -14,20 +15,6 @@ pub(crate) struct PlaneProjection {
     radius: Precision,
     adjusted_radius: Precision,
     points: Vec<Geocentric>,
-}
-
-impl Default for PlaneProjection {
-    fn default() -> Self {
-        PlaneProjection {
-            center: (0.0, 0.0, 0.0),
-            x: (0.0, 0.0, 0.0),
-            y: (0.0, 0.0, 0.0),
-            z: (0.0, 0.0, 0.0),
-            radius: 0.0,
-            adjusted_radius: 0.0,
-            points: vec![],
-        }
-    }
 }
 
 impl PlaneProjection {

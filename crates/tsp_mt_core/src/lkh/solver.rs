@@ -11,8 +11,7 @@ use crate::{
     Error, Result, SolverInput, Tour,
     config::LkhConfig,
     constants::{MIN_CYCLE_POINTS, PREP_CANDIDATES_FILE, PROBLEM_FILE, RUN_FILE},
-    file_cleanup,
-    geometry::TourGeometry,
+    file_cleanup, geometry,
     node::LKHNode,
     options::SolverOptions,
     problem::TsplibProblemWriter,
@@ -196,7 +195,7 @@ pub fn solve_tsp_with_lkh_parallel(input: SolverInput, options: SolverOptions) -
                 )?;
 
                 let tour = rs.parse_tsplib_tour(points.len())?;
-                let len = TourGeometry::tour_length(&points, &tour);
+                let len = geometry::tour_length(&points, &tour);
 
                 log::debug!("solver.run: done idx={idx} seed={seed} tour_m={len:.0}");
                 Ok((tour, len))

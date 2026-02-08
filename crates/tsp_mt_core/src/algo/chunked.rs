@@ -11,9 +11,7 @@ use crate::{
     Error, Result, SolverInput, Tour,
     config::LkhConfig,
     constants::{CENTROIDS_FILE, MIN_CYCLE_POINTS, RUN_FILE},
-    file_cleanup,
-    geometry::TourGeometry,
-    h3_chunking::H3Chunker,
+    file_cleanup, geometry, h3_chunking,
     node::LKHNode,
     options::SolverOptions,
     problem::TsplibProblemWriter,
@@ -21,7 +19,7 @@ use crate::{
     projection::PlaneProjection,
     run_spec::RunSpec,
     solver::LkhSolver,
-    stitching::TourStitcher,
+    stitching,
 };
 
 const RUN_INDEX_SINGLE: usize = 0;
@@ -164,7 +162,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(input: SolverInput, options: SolverOptions)
         .radius(options.projection_radius)
         .project();
 
-    let chunks = H3Chunker::partition_indices(&input.points, options.max_chunk_size)?;
+    let chunks = h3_chunking::partition_indices(&input.points, options.max_chunk_size)?;
     log::info!(
         "chunker: partitioned n={} chunks={} max_chunk_size={}",
         input.n(),
@@ -198,7 +196,7 @@ pub fn solve_tsp_with_lkh_h3_chunked(input: SolverInput, options: SolverOptions)
 
     let centroids: Vec<LKHNode> = chunks
         .iter()
-        .map(|idxs| TourGeometry::centroid_of_indices(&global_coords, idxs))
+        .map(|idxs| geometry::centroid_of_indices(&global_coords, idxs))
         .collect();
 
     log::info!("chunker: ordering centroids count={}", centroids.len());
@@ -212,14 +210,14 @@ pub fn solve_tsp_with_lkh_h3_chunked(input: SolverInput, options: SolverOptions)
     }
 
     let (mut merged, boundaries) =
-        TourStitcher::stitch_chunk_tours_dense(&global_coords, ordered_tours);
+        stitching::stitch_chunk_tours_dense(&global_coords, ordered_tours);
     log::info!(
         "chunker: stitched n={} boundaries={}",
         merged.len(),
         boundaries.len()
     );
 
-    TourStitcher::boundary_two_opt(
+    stitching::boundary_two_opt(
         &global_coords,
         &mut merged,
         &boundaries,
