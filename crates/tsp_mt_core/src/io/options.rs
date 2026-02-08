@@ -29,6 +29,9 @@ pub struct SolverOptions {
     /// Number of passes for boundary-local 2-opt refinement.
     #[cli(long = "boundary-2opt-passes")]
     pub boundary_2opt_passes: usize,
+    /// Distance threshold (meters) used when counting route outlier spikes in metrics logs.
+    #[cli(long = "outlier-threshold")]
+    pub outlier_threshold: f64,
     /// Structured logging level.
     #[cli(long = "log-level", parse_with = "LogLevel::parse")]
     pub log_level: LogLevel,
@@ -87,6 +90,7 @@ impl Default for SolverOptions {
             centroid_order_time_limit: 10,
             boundary_2opt_window: 500,
             boundary_2opt_passes: 50,
+            outlier_threshold: 10.0,
             log_level: LogLevel::Warn,
             log_format: LogFormat::Compact,
             log_timestamp: true,
@@ -184,6 +188,7 @@ impl SolverOptions {
             "  --centroid-order-time-limit <usize>\n",
             "  --boundary-2opt-window <usize>\n",
             "  --boundary-2opt-passes <usize>\n",
+            "  --outlier-threshold <f64>\n",
             "  --log-level <error|warn|info|debug|trace|off>\n",
             "  --log-format <compact|pretty>\n",
             "  --log-timestamp[=<bool>]\n",
@@ -280,6 +285,7 @@ mod tests {
             "--centroid-order-time-limit=9",
             "--boundary-2opt-window=8",
             "--boundary-2opt-passes=7",
+            "--outlier-threshold=12.5",
             "--log-level=debug",
             "--log-format=pretty",
             "--log-timestamp=false",
@@ -295,6 +301,7 @@ mod tests {
         assert_eq!(options.centroid_order_time_limit, 9);
         assert_eq!(options.boundary_2opt_window, 8);
         assert_eq!(options.boundary_2opt_passes, 7);
+        assert_eq!(options.outlier_threshold, 12.5);
         assert_eq!(options.log_level, LogLevel::Debug);
         assert_eq!(options.log_format, LogFormat::Pretty);
         assert!(!options.log_timestamp);

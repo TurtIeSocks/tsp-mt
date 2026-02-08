@@ -4,13 +4,13 @@
 mod algo;
 mod constants;
 mod error;
+pub mod file_cleanup;
 mod geo;
 mod io;
 mod lkh;
 pub mod logging;
 mod node;
 mod tour;
-pub mod file_cleanup;
 
 pub(crate) use algo::{h3_chunking, stitching};
 pub(crate) use geo::{geometry, projection};

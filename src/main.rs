@@ -7,9 +7,7 @@ use std::{
 
 use log::info;
 
-use tsp_mt_core::{
-    Result, SolverInput, SolverOptions, logging, solve_tsp_with_lkh_h3_chunked,
-};
+use tsp_mt_core::{Result, SolverInput, SolverOptions, logging, solve_tsp_with_lkh_h3_chunked};
 
 fn main() -> Result<()> {
     if env::args()
@@ -31,13 +29,14 @@ fn main() -> Result<()> {
 fn main_inner(options: SolverOptions) -> Result<()> {
     let input = SolverInput::from_args()?;
     let output_path = options.output_path().map(PathBuf::from);
+    let outlier_threshold = options.outlier_threshold;
 
     info!("input: {input}");
     info!("options: {options}");
 
     let tour = solve_tsp_with_lkh_h3_chunked(input, options)?;
+    tour.tour_metrics(outlier_threshold);
     write_route_output(&tour.nodes, output_path.as_deref())?;
-    tour.tour_metrics(10.0);
 
     Ok(())
 }

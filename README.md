@@ -129,6 +129,7 @@ Both `--flag value` and `--flag=value` work.
 | `--centroid-order-time-limit <usize>` | int                |             `10` | LKH `TIME_LIMIT` seconds for centroid ordering                                    |
 | `--boundary-2opt-window <usize>`      | int                |            `500` | Boundary-local 2-opt window during chunk stitching                                |
 | `--boundary-2opt-passes <usize>`      | int                |             `50` | Boundary-local 2-opt passes during chunk stitching                                |
+| `--outlier-threshold <f64>`           | float              |           `10.0` | Distance threshold (meters) for counting spike/outlier jumps in route metrics     |
 | `--log-level <value>`                 | enum               |          `warn` | One of: `error`, `warn`, `warning`, `info`, `debug`, `trace`, `off`              |
 | `--log-format <value>`                | enum               |       `compact` | One of: `compact`, `pretty`                                                       |
 | `--log-timestamp[=<bool>]`            | bool (optional val) |          `true` | If provided without value, sets to `true`                                         |

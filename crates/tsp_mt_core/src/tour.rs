@@ -4,7 +4,7 @@ use crate::LKHNode;
 
 #[derive(Debug, Default, New)]
 pub struct Tour {
-   pub nodes: Vec<LKHNode>,
+    pub nodes: Vec<LKHNode>,
 }
 
 impl Tour {
