@@ -139,7 +139,7 @@ impl ChunkSolver {
 #[tsp_mt_derive::timer("chunked")]
 pub fn solve_tsp_with_lkh_h3_chunked(input: SolverInput, options: SolverOptions) -> Result<Tour> {
     // cleans up workdir on drop
-    let chunk_solver = ChunkSolver::new(&input.work_dir);
+    let chunk_solver = ChunkSolver::new(&options.work_dir);
 
     if options.max_chunk_size == 0 {
         return Err(Error::invalid_input(ERR_INVALID_MAX_CHUNK_SIZE));
@@ -177,11 +177,13 @@ pub fn solve_tsp_with_lkh_h3_chunked(input: SolverInput, options: SolverOptions)
         .enumerate()
         .map(|(chunk_id, idxs)| -> Result<Vec<usize>> {
             let chunk_points: Vec<LKHNode> = idxs.iter().map(|&i| input.get_point(i)).collect();
-            let chunk_dir = input.work_dir.join(format!("{CHUNK_DIR_PREFIX}{chunk_id}"));
+            let chunk_dir = options
+                .work_dir
+                .join(format!("{CHUNK_DIR_PREFIX}{chunk_id}"));
 
             let now = Instant::now();
             let tour_local =
-                chunk_solver.solve_single(&input.lkh_exe, &chunk_dir, &chunk_points, &options)?;
+                chunk_solver.solve_single(&options.lkh_exe, &chunk_dir, &chunk_points, &options)?;
             let tour_global: Vec<usize> = tour_local.into_iter().map(|li| idxs[li]).collect();
 
             log::info!(
@@ -200,9 +202,9 @@ pub fn solve_tsp_with_lkh_h3_chunked(input: SolverInput, options: SolverOptions)
         .collect();
 
     log::info!("chunker: ordering centroids count={}", centroids.len());
-    let order_dir = input.work_dir.join(CHUNK_ORDER_DIR);
+    let order_dir = options.work_dir.join(CHUNK_ORDER_DIR);
     let order =
-        chunk_solver.order_by_centroid_tsp(&input.lkh_exe, &order_dir, &centroids, &options)?;
+        chunk_solver.order_by_centroid_tsp(&options.lkh_exe, &order_dir, &centroids, &options)?;
 
     let mut ordered_tours: Vec<Vec<usize>> = Vec::with_capacity(solved_chunk_tours.len());
     for ci in order {
@@ -237,22 +239,11 @@ pub fn solve_tsp_with_lkh_h3_chunked(input: SolverInput, options: SolverOptions)
 
 #[cfg(test)]
 mod tests {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
     use super::solve_tsp_with_lkh_h3_chunked;
     use crate::{LKHNode, SolverInput, SolverOptions};
 
-    fn unique_temp_dir(name: &str) -> std::path::PathBuf {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock should be after epoch")
-            .as_nanos();
-        std::env::temp_dir().join(format!("tsp-mt-chunked-tests-{name}-{nanos}"))
-    }
-
     fn sample_input(points: Vec<LKHNode>) -> SolverInput {
-        let work_dir = unique_temp_dir("workdir");
-        SolverInput::new(std::path::Path::new("/bin/false"), &work_dir, &points)
+        SolverInput::new(&points)
     }
 
     #[test]

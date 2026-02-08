@@ -135,7 +135,7 @@ PI_FILE = {}
 /// Returns best tour points.
 #[tsp_mt_derive::timer("solver")]
 pub fn solve_tsp_with_lkh_parallel(input: SolverInput, options: SolverOptions) -> Result<Tour> {
-    file_cleanup::register_workdir_for_shutdown_cleanup(&input.work_dir);
+    file_cleanup::register_workdir_for_shutdown_cleanup(&options.work_dir);
 
     if input.n() < MIN_CYCLE_POINTS {
         return Err(Error::invalid_input(format!(
@@ -150,7 +150,7 @@ pub fn solve_tsp_with_lkh_parallel(input: SolverInput, options: SolverOptions) -
     }
 
     let cfg = LkhConfig::new(input.n());
-    let solver = LkhSolver::new(&input.lkh_exe, &input.work_dir);
+    let solver = LkhSolver::new(&options.lkh_exe, &options.work_dir);
     solver.create_work_dir()?;
 
     let points = PlaneProjection::new(&input.points)
@@ -214,7 +214,7 @@ pub fn solve_tsp_with_lkh_parallel(input: SolverInput, options: SolverOptions) -
         best.1
     );
 
-    file_cleanup::cleanup_workdir(&input.work_dir);
+    file_cleanup::cleanup_workdir(&options.work_dir);
 
     Ok(Tour::new(
         best.0.into_iter().map(|idx| input.get_point(idx)).collect(),

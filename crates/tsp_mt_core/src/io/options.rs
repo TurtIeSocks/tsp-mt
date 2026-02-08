@@ -1,13 +1,25 @@
-use std::{env, path::Path};
+use std::{
+    env,
+    path::{Path, PathBuf},
+    process,
+};
 
 use log::LevelFilter;
 use tsp_mt_derive::{CliOptions, CliValue, KvDisplay};
 
-use crate::{Error, Result};
+use crate::{Error, Result, embedded_lkh};
 
 /// Runtime options for LKH solving behavior.
 #[derive(Clone, Debug, CliOptions, KvDisplay)]
 pub struct SolverOptions {
+    /// Path to the LKH executable.
+    #[cli(long = "lkh-exe")]
+    #[kv(fmt = "path")]
+    pub lkh_exe: PathBuf,
+    /// Working directory for temporary files and run artifacts.
+    #[cli(long = "work-dir")]
+    #[kv(fmt = "path")]
+    pub work_dir: PathBuf,
     /// Radius used by local tangent-plane projection (in meters).
     #[cli(long = "projection-radius")]
     pub projection_radius: f64,
@@ -83,6 +95,8 @@ pub enum LogFormat {
 impl Default for SolverOptions {
     fn default() -> Self {
         Self {
+            lkh_exe: PathBuf::new(),
+            work_dir: default_work_dir(),
             projection_radius: 70.0,
             max_chunk_size: 5_000,
             centroid_order_seed: 999,
@@ -102,15 +116,20 @@ impl Default for SolverOptions {
 
 impl SolverOptions {
     pub fn from_args() -> Result<Self> {
-        Self::parse_from_iter(env::args().skip(1))
+        let (mut options, saw_lkh_exe) = Self::parse_from_iter(env::args().skip(1))?;
+        if !saw_lkh_exe {
+            options.lkh_exe = embedded_lkh::ensure_lkh_executable()?;
+        }
+        Ok(options)
     }
 
-    fn parse_from_iter<I, S>(args: I) -> Result<Self>
+    fn parse_from_iter<I, S>(args: I) -> Result<(Self, bool)>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
         let mut options = Self::default();
+        let mut saw_lkh_exe = false;
         let mut args = args
             .into_iter()
             .map(|arg| arg.as_ref().to_owned())
@@ -138,6 +157,9 @@ impl SolverOptions {
             let (name, value) = Self::split_arg(raw_name, &mut args);
 
             if options.apply_cli_option(&name, value.clone())? {
+                if name == "lkh-exe" {
+                    saw_lkh_exe = true;
+                }
                 continue;
             }
 
@@ -156,12 +178,6 @@ impl SolverOptions {
                     }
                     options.log_timestamp = false;
                 }
-                // Handled by SolverInput::from_args; accepted here to allow dual parsing.
-                "lkh-exe" | "work-dir" => {
-                    if value.is_none() {
-                        return Err(Error::invalid_input(format!("Missing value for --{name}")));
-                    }
-                }
                 _ => {
                     return Err(Error::invalid_input(format!(
                         "Unknown option: --{name}\n\n{}",
@@ -171,7 +187,7 @@ impl SolverOptions {
             }
         }
 
-        Ok(options)
+        Ok((options, saw_lkh_exe))
     }
 
     pub fn usage() -> &'static str {
@@ -222,6 +238,18 @@ impl SolverOptions {
             Some(Path::new(output))
         }
     }
+
+    pub fn lkh_path(&self) -> &Path {
+        &self.lkh_exe
+    }
+
+    pub fn work_dir_path(&self) -> &Path {
+        &self.work_dir
+    }
+}
+
+fn default_work_dir() -> PathBuf {
+    env::temp_dir().join(format!("tsp-mt-{}", process::id()))
 }
 
 fn parse_bool(name: &str, value: &str) -> Result<bool> {
@@ -277,7 +305,7 @@ mod tests {
 
     #[test]
     fn parse_from_iter_applies_known_cli_options() {
-        let options = SolverOptions::parse_from_iter([
+        let (options, _) = SolverOptions::parse_from_iter([
             "--projection-radius=120.5",
             "--max-chunk-size=42",
             "--centroid-order-seed=77",
@@ -311,7 +339,7 @@ mod tests {
 
     #[test]
     fn parse_from_iter_accepts_no_log_timestamp_flag() {
-        let options =
+        let (options, _) =
             SolverOptions::parse_from_iter(["--no-log-timestamp"]).expect("parse options");
         assert!(!options.log_timestamp);
     }
@@ -338,13 +366,18 @@ mod tests {
     }
 
     #[test]
-    fn parse_from_iter_allows_input_passthrough_options_with_values() {
-        SolverOptions::parse_from_iter(["--lkh-exe=/bin/lkh", "--work-dir=/tmp/work"])
-            .expect("passthrough options should be accepted");
+    fn parse_from_iter_reads_lkh_exe_and_work_dir() {
+        let (options, saw_lkh) =
+            SolverOptions::parse_from_iter(["--lkh-exe=/bin/lkh", "--work-dir=/tmp/work"])
+                .expect("options should be parsed");
+
+        assert!(saw_lkh);
+        assert_eq!(options.lkh_path(), std::path::Path::new("/bin/lkh"));
+        assert_eq!(options.work_dir_path(), std::path::Path::new("/tmp/work"));
     }
 
     #[test]
-    fn parse_from_iter_requires_value_for_passthrough_options() {
+    fn parse_from_iter_requires_value_for_lkh_exe() {
         let err =
             SolverOptions::parse_from_iter(["--lkh-exe"]).expect_err("missing value should fail");
         assert!(err.to_string().contains("Missing value for --lkh-exe"));

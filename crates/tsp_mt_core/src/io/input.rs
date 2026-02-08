@@ -1,96 +1,30 @@
-use std::{
-    env,
-    io::Read,
-    path::{Path, PathBuf},
-    process,
-};
-use tsp_mt_derive::{CliOptions, KvDisplay};
+use std::io::Read;
+use tsp_mt_derive::KvDisplay;
 
-use crate::{Error, LKHNode, Result, embedded_lkh};
+use crate::{Error, LKHNode, Result};
 
 /// Runtime input for LKH solver.
-#[derive(Clone, Debug, CliOptions, KvDisplay)]
+#[derive(Clone, Debug, KvDisplay)]
 pub struct SolverInput {
-    #[cli(long = "lkh-exe")]
-    #[kv(fmt = "path")]
-    pub(crate) lkh_exe: PathBuf,
-    #[cli(long = "work-dir")]
-    #[kv(fmt = "path")]
-    pub(crate) work_dir: PathBuf,
     #[kv(fmt = "len")]
     pub(crate) points: Vec<LKHNode>,
 }
 
 impl SolverInput {
-    pub fn new(lkh_exe: &Path, work_dir: &Path, points: &[LKHNode]) -> Self {
+    pub fn new(points: &[LKHNode]) -> Self {
         Self {
-            lkh_exe: lkh_exe.to_path_buf(),
-            work_dir: work_dir.to_path_buf(),
             points: points.to_vec(),
         }
     }
 
     pub fn from_args() -> Result<Self> {
-        let (mut input, saw_lkh_exe) = Self::parse_cli_args(env::args().skip(1))?;
-
-        if !saw_lkh_exe {
-            input.lkh_exe = embedded_lkh::ensure_lkh_executable()?;
-        }
-        input.points = read_points_from_stdin()?;
-        Ok(input)
-    }
-
-    fn parse_cli_args<I, S>(args: I) -> Result<(Self, bool)>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        let mut input = Self {
-            lkh_exe: PathBuf::new(),
-            work_dir: default_work_dir(),
-            points: Vec::new(),
-        };
-        let mut saw_lkh_exe = false;
-
-        let mut args = args
-            .into_iter()
-            .map(|arg| arg.as_ref().to_owned())
-            .peekable();
-        while let Some(arg) = args.next() {
-            if arg == "--help" || arg == "-h" {
-                return Err(Error::invalid_input(Self::usage()));
-            }
-            let Some(raw_name) = arg.strip_prefix("--") else {
-                continue;
-            };
-
-            let (name, value) = Self::split_arg(raw_name, &mut args);
-            if input.apply_cli_option(&name, value)? && name == "lkh-exe" {
-                saw_lkh_exe = true;
-            }
-        }
-
-        Ok((input, saw_lkh_exe))
-    }
-
-    pub fn usage() -> &'static str {
-        concat!(
-            "Input options:\n",
-            "  --lkh-exe <path>   Path to the LKH executable\n",
-            "  --work-dir <path>  Working directory for temp files\n",
-        )
+        Ok(Self {
+            points: read_points_from_stdin()?,
+        })
     }
 
     pub fn points_len(&self) -> usize {
         self.points.len()
-    }
-
-    pub fn lkh_path(&self) -> &Path {
-        &self.lkh_exe
-    }
-
-    pub fn work_dir_path(&self) -> &Path {
-        &self.work_dir
     }
 
     pub(crate) fn n(&self) -> usize {
@@ -100,10 +34,6 @@ impl SolverInput {
     pub(crate) fn get_point(&self, idx: usize) -> LKHNode {
         self.points[idx]
     }
-}
-
-fn default_work_dir() -> PathBuf {
-    env::temp_dir().join(format!("tsp-mt-{}", process::id()))
 }
 
 fn read_points_from_stdin() -> Result<Vec<LKHNode>> {
@@ -149,34 +79,7 @@ fn parse_points(input: &str) -> Result<Vec<LKHNode>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{SolverInput, parse_points};
-
-    #[test]
-    fn parse_cli_args_reads_lkh_exe_and_work_dir() {
-        let (input, saw_lkh) =
-            SolverInput::parse_cli_args(["--lkh-exe", "/bin/lkh", "--work-dir", "/tmp/work"])
-                .expect("parse args");
-
-        assert!(saw_lkh);
-        assert_eq!(input.lkh_path().to_str().expect("utf8 path"), "/bin/lkh");
-        assert_eq!(
-            input.work_dir_path().to_str().expect("utf8 path"),
-            "/tmp/work"
-        );
-    }
-
-    #[test]
-    fn parse_cli_args_help_returns_usage_error() {
-        let err = SolverInput::parse_cli_args(["--help"]).expect_err("help should short-circuit");
-        assert!(err.to_string().contains("Input options:"));
-    }
-
-    #[test]
-    fn parse_cli_args_without_lkh_tracks_missing_lkh() {
-        let (_input, saw_lkh) =
-            SolverInput::parse_cli_args(["--work-dir", "/tmp/work"]).expect("parse args");
-        assert!(!saw_lkh);
-    }
+    use super::parse_points;
 
     #[test]
     fn parse_points_parses_whitespace_separated_lat_lng_tokens() {
