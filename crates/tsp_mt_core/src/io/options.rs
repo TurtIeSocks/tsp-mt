@@ -237,18 +237,18 @@ mod tests {
 
     #[test]
     fn parse_bool_accepts_common_true_values() {
-        assert_eq!(parse_bool("x", "true").expect("parse"), true);
-        assert_eq!(parse_bool("x", "1").expect("parse"), true);
-        assert_eq!(parse_bool("x", "YES").expect("parse"), true);
-        assert_eq!(parse_bool("x", "ON").expect("parse"), true);
+        assert!(parse_bool("x", "true").expect("parse"));
+        assert!(parse_bool("x", "1").expect("parse"));
+        assert!(parse_bool("x", "YES").expect("parse"));
+        assert!(parse_bool("x", "ON").expect("parse"));
     }
 
     #[test]
     fn parse_bool_accepts_common_false_values() {
-        assert_eq!(parse_bool("x", "false").expect("parse"), false);
-        assert_eq!(parse_bool("x", "0").expect("parse"), false);
-        assert_eq!(parse_bool("x", "NO").expect("parse"), false);
-        assert_eq!(parse_bool("x", "off").expect("parse"), false);
+        assert!(!parse_bool("x", "false").expect("parse"));
+        assert!(!parse_bool("x", "0").expect("parse"));
+        assert!(!parse_bool("x", "NO").expect("parse"));
+        assert!(!parse_bool("x", "off").expect("parse"));
     }
 
     #[test]
@@ -355,15 +355,19 @@ mod tests {
         let options = SolverOptions::default();
         assert!(options.output_path().is_none());
 
-        let mut options = SolverOptions::default();
-        options.output = "-".to_string();
+        let options = SolverOptions {
+            output: "-".to_string(),
+            ..SolverOptions::default()
+        };
         assert!(options.output_path().is_none());
     }
 
     #[test]
     fn output_path_returns_path_for_non_empty_value() {
-        let mut options = SolverOptions::default();
-        options.output = "out/route.txt".to_string();
+        let options = SolverOptions {
+            output: "out/route.txt".to_string(),
+            ..SolverOptions::default()
+        };
         assert_eq!(
             options.output_path().expect("path should exist"),
             std::path::Path::new("out/route.txt")
@@ -375,15 +379,19 @@ mod tests {
         let options = SolverOptions::default();
         assert!(options.log_output_path().is_none());
 
-        let mut options = SolverOptions::default();
-        options.log_output = "-".to_string();
+        let options = SolverOptions {
+            log_output: "-".to_string(),
+            ..SolverOptions::default()
+        };
         assert!(options.log_output_path().is_none());
     }
 
     #[test]
     fn log_output_path_returns_path_for_non_empty_value() {
-        let mut options = SolverOptions::default();
-        options.log_output = "out/run.log".to_string();
+        let options = SolverOptions {
+            log_output: "out/run.log".to_string(),
+            ..SolverOptions::default()
+        };
         assert_eq!(
             options.log_output_path().expect("path should exist"),
             std::path::Path::new("out/run.log")
