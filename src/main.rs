@@ -7,7 +7,7 @@ use std::{
 
 use log::info;
 
-use tsp_mt_core::{Result, SolverInput, SolverOptions, logging, solve_tsp_with_lkh_h3_chunked};
+use tsp_mt_core::{Result, SolverInput, SolverOptions, Tour, logging, runner::lkh_single};
 
 fn main() -> Result<()> {
     if env::args()
@@ -33,8 +33,9 @@ fn main_inner(options: SolverOptions) -> Result<()> {
 
     info!("input: {input}");
     info!("options: {options}");
-
-    let tour = solve_tsp_with_lkh_h3_chunked(input, options)?;
+    let tour = lkh_single(input, options)?;
+    let tour = Tour::new(tour);
+    // let tour = solve_tsp_with_lkh_h3_chunked(input, options)?;
     tour.tour_metrics(outlier_threshold);
     write_route_output(&tour.nodes, output_path.as_deref())?;
 

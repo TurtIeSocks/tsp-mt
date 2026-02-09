@@ -1,6 +1,7 @@
 pub mod parameters;
 pub mod problem;
 pub mod process;
+pub mod solver;
 pub mod tour;
 
 #[cfg(feature = "embedded-lkh")]

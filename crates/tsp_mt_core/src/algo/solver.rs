@@ -5,9 +5,7 @@ use std::{
     thread,
 };
 
-use lkh::{
-    parameters::LkhParameters, problem::TsplibProblemWriter, process::LkhProcess, tour::TsplibTour,
-};
+use lkh::{parameters::LkhParameters, process::LkhProcess, tour::TsplibTour};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use rayon::prelude::*;
 
@@ -153,11 +151,11 @@ impl LkhSolver {
     }
 
     pub(crate) fn create_problem_file(&self, points: &[LKHNode]) -> Result<()> {
-        TsplibProblemWriter::write_euc2d(
-            &self.files.problem_tsp(),
-            PROBLEM_BASENAME,
-            points.iter().map(|p| (p.x, p.y)),
-        )?;
+        // TsplibProblemWriter::write_euc2d(
+        //     &self.files.problem_tsp(),
+        //     PROBLEM_BASENAME,
+        //     points.iter().map(|p| (p.x, p.y)),
+        // )?;
         Ok(())
     }
 
@@ -216,9 +214,10 @@ impl LkhSolver {
         Ok(())
     }
 
-    pub(crate) fn run(&self, par_path: &Path, context: impl ToString) -> Result<Output> {
+    pub(crate) fn run(&self, par_path: &Path, context: impl Into<String>) -> Result<Output> {
         LkhProcess::default()
-            .run(par_path, context)
+            .with_context(context)
+            .run(par_path)
             .map_err(Error::from)
     }
 }
@@ -286,7 +285,7 @@ pub fn solve_tsp_with_lkh_parallel(input: SolverInput, options: SolverOptions) -
                     &format!("LKH failed (run idx={idx}, seed={seed})"),
                 )?;
 
-                let tour = TsplibTour::parse_tsplib_tour(&tour_path, points.len())?;
+                let tour = TsplibTour::parse_tsplib_tour(&tour_path)?;
                 let len = geometry::tour_length(&points, &tour);
 
                 log::debug!("solver.run: done idx={idx} seed={seed} tour_m={len:.0}");

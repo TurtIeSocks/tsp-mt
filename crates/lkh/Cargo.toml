@@ -1,18 +1,18 @@
 [package]
-name = "lkh"
-version = "0.1.0"
-edition = "2024"
-build = "build.rs"
+name        = "lkh"
+version     = "0.1.0"
+edition     = "2024"
+build       = "build.rs"
 description = "LKH process/config integration helpers"
-license = "Apache-2.0"
-readme = "../../README.md"
-keywords = ["tsp", "routing", "lkh"]
-categories = ["algorithms"]
+license     = "Apache-2.0"
+readme      = "../../README.md"
+keywords    = ["tsp", "routing", "lkh"]
+categories  = ["algorithms"]
 
 [features]
-default = []
+default      = ["embedded-lkh"]
 embedded-lkh = []
 
 [dependencies]
-thiserror = "2.0.18"
+thiserror  = "2.0.18"
 lkh_derive = { path = "../lkh_derive" }

@@ -9,6 +9,7 @@ mod geo;
 mod io;
 pub mod logging;
 mod node;
+pub mod runner;
 mod tour;
 
 pub(crate) use algo::{h3_chunking, stitching};

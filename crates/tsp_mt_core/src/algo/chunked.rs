@@ -4,9 +4,7 @@ use std::{
     time::Instant,
 };
 
-use lkh::{
-    parameters::LkhParameters, problem::TsplibProblemWriter, process::LkhProcess, tour::TsplibTour,
-};
+use lkh::{parameters::LkhParameters, process::LkhProcess, tour::TsplibTour};
 use rayon::prelude::*;
 
 use crate::{
@@ -90,7 +88,7 @@ impl ChunkSolver {
 
         solver.run(&run_par, ERR_LKH_CHUNK_FAILED)?;
 
-        Ok(TsplibTour::parse_tsplib_tour(&run_tour, n)?)
+        Ok(TsplibTour::parse_tsplib_tour(&run_tour)?)
     }
 
     fn order_by_centroid_tsp(
@@ -112,11 +110,11 @@ impl ChunkSolver {
         fs::create_dir_all(work_dir)?;
 
         let problem = work_dir.join(file_name(CENTROIDS_BASENAME, TSP_EXTENSION));
-        TsplibProblemWriter::write_euc2d(
-            &problem,
-            CENTROIDS_BASENAME,
-            centroids.iter().map(|p| (p.x, p.y)),
-        )?;
+        // TsplibProblemWriter::write_euc2d(
+        //     &problem,
+        //     CENTROIDS_BASENAME,
+        //     centroids.iter().map(|p| (p.x, p.y)),
+        // )?;
 
         let par_path = work_dir.join(file_name(CENTROIDS_BASENAME, PAR_EXTENSION));
         let tour_path = work_dir.join(file_name(CENTROIDS_BASENAME, TOUR_EXTENSION));
@@ -136,10 +134,12 @@ impl ChunkSolver {
 
         cfg.write_to_file(&par_path)?;
 
-        LkhProcess::default().run(&par_path, ERR_CENTROID_ORDERING_FAILED)?;
+        LkhProcess::default()
+            .with_context(ERR_CENTROID_ORDERING_FAILED)
+            .run(&par_path)?;
 
         log::debug!("chunked.order: done centroids={}", centroids.len());
-        Ok(TsplibTour::parse_tsplib_tour(&tour_path, centroids.len())?)
+        Ok(TsplibTour::parse_tsplib_tour(&tour_path)?)
     }
 }
 

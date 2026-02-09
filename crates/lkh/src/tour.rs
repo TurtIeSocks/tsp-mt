@@ -1,11 +1,11 @@
 use std::{
     fmt::{Display, Formatter},
     fs,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
-use crate::{LkhError, LkhResult, spec_writer::SpecWriter};
-use lkh_derive::LkhDisplay;
+use crate::{LkhError, LkhResult, spec_writer::SpecWriter, with_methods_error};
+use lkh_derive::{LkhDisplay, WithMethods};
 
 const TOUR_SECTION_HEADER: &str = "TOUR_SECTION";
 const TOUR_END_MARKER: &str = "-1";
@@ -20,7 +20,8 @@ pub enum TsplibTourType {
 }
 
 /// TSPLIB `.tour` file model.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, WithMethods)]
+#[with(error = LkhError)]
 pub struct TsplibTour {
     pub name: Option<String>,
     pub comment_lines: Vec<String>,
@@ -31,17 +32,72 @@ pub struct TsplibTour {
     pub emit_eof: bool,
 }
 
+with_methods_error!(TsplibTourWithMethodsError);
+
 impl TsplibTour {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            name: None,
+            comment_lines: Vec::new(),
+            tour_type: None,
+            dimension: None,
+            tour_section: Vec::new(),
+            emit_eof: true,
+        }
     }
 
-    pub fn parse_from_file(path: &Path) -> LkhResult<Self> {
-        let text = fs::read_to_string(path)?;
-        Self::parse(&text)
+    pub fn from_file(file_path: impl Into<PathBuf>) -> LkhResult<Self> {
+        Self::new().parse_from_file(file_path)
     }
 
-    pub fn parse(text: &str) -> LkhResult<Self> {
+    pub fn from_text(text: String) -> LkhResult<Self> {
+        Self::parse(text)
+    }
+
+    pub fn read_file(&mut self, file_path: impl Into<PathBuf>) -> LkhResult<()> {
+        let text = Self::read(file_path)?;
+        *self = Self::parse(text)?;
+        Ok(())
+    }
+
+    pub fn parse_tsplib_tour(path: &Path) -> LkhResult<Vec<usize>> {
+        Self::new().parse_from_file(path)?.zero_based_tour()
+    }
+
+    pub fn zero_based_tour(&self) -> LkhResult<Vec<usize>> {
+        // if self.tour_section.len() != n {
+        //     return Err(LkhError::invalid_data(format!(
+        //         "Expected {n} nodes in tour, got {}",
+        //         self.tour_section.len()
+        //     )));
+        // }
+        let mut zero_based = Vec::with_capacity(self.tour_section.len());
+        for &id in &self.tour_section {
+            if id < TSPLIB_NODE_ID_OFFSET {
+                return Err(LkhError::invalid_data(format!(
+                    "Bad node id {id}; TSPLIB ids must be >= {TSPLIB_NODE_ID_OFFSET}"
+                )));
+            }
+            zero_based.push(id - TSPLIB_NODE_ID_OFFSET);
+        }
+
+        Ok(zero_based)
+    }
+
+    pub fn write_to_file(&self, file_path: impl Into<PathBuf>) -> LkhResult<()> {
+        fs::write(file_path.into(), self.to_string()).map_err(LkhError::Io)
+    }
+
+    fn read(file_path: impl Into<PathBuf>) -> LkhResult<String> {
+        fs::read_to_string(file_path.into()).map_err(LkhError::Io)
+    }
+
+    fn parse_from_file(self, file_path: impl Into<PathBuf>) -> LkhResult<Self> {
+        let text = Self::read(file_path)?;
+        Self::parse(text)
+    }
+
+    fn parse(text: String) -> LkhResult<Self> {
         let mut tour = Self::new();
         tour.emit_eof = false;
         let mut in_tour_section = false;
@@ -140,49 +196,6 @@ impl TsplibTour {
 
         Ok(tour)
     }
-
-    pub fn parse_tsplib_tour(path: &Path, n: usize) -> LkhResult<Vec<usize>> {
-        Self::parse_from_file(path)?.to_zero_based_tour(n)
-    }
-
-    pub fn to_zero_based_tour(&self, n: usize) -> LkhResult<Vec<usize>> {
-        if self.tour_section.len() != n {
-            return Err(LkhError::invalid_data(format!(
-                "Expected {n} nodes in tour, got {}",
-                self.tour_section.len()
-            )));
-        }
-
-        let mut zero_based = Vec::with_capacity(self.tour_section.len());
-        for &id in &self.tour_section {
-            if id < TSPLIB_NODE_ID_OFFSET {
-                return Err(LkhError::invalid_data(format!(
-                    "Bad node id {id}; TSPLIB ids must be >= {TSPLIB_NODE_ID_OFFSET}"
-                )));
-            }
-            zero_based.push(id - TSPLIB_NODE_ID_OFFSET);
-        }
-
-        Ok(zero_based)
-    }
-
-    pub fn write_to_file(&self, path: &Path) -> LkhResult<()> {
-        fs::write(path, self.to_string())?;
-        Ok(())
-    }
-}
-
-impl Default for TsplibTour {
-    fn default() -> Self {
-        Self {
-            name: None,
-            comment_lines: Vec::new(),
-            tour_type: None,
-            dimension: None,
-            tour_section: Vec::new(),
-            emit_eof: true,
-        }
-    }
 }
 
 impl Display for TsplibTour {
@@ -241,7 +254,7 @@ mod tests {
         )
         .expect("write tour file");
 
-        let parsed = TsplibTour::parse_tsplib_tour(&tour_path, 3).expect("parse tsplib tour");
+        let parsed = TsplibTour::parse_tsplib_tour(&tour_path).expect("parse tsplib tour");
         assert_eq!(parsed, vec![1, 0, 2]);
 
         fs::remove_dir_all(&dir).expect("cleanup temp dir");
@@ -256,7 +269,7 @@ mod tests {
         fs::write(&tour_path, "TOUR_SECTION\n1\n-1\nEOF\n").expect("write tour file");
 
         let err =
-            TsplibTour::parse_tsplib_tour(&tour_path, 2).expect_err("expected node-count mismatch");
+            TsplibTour::parse_tsplib_tour(&tour_path).expect_err("expected node-count mismatch");
         let msg = err.to_string();
         assert!(msg.contains("Expected 2 nodes in tour, got 1"));
 
@@ -278,9 +291,10 @@ TOUR_SECTION
 4
 -1
 EOF
-"#;
+"#
+        .to_string();
 
-        let tour = TsplibTour::parse(text).expect("parse tour");
+        let tour = TsplibTour::from_text(text).expect("parse tour");
         assert_eq!(tour.name.as_deref(), Some("problem.111984.tour"));
         assert_eq!(tour.comment_lines.len(), 2);
         assert_eq!(tour.tour_type, Some(TsplibTourType::Tour));

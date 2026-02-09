@@ -1,10 +1,10 @@
 use std::{
     fmt::{Display, Formatter},
     fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
-use crate::{LkhResult, spec_writer::SpecWriter};
+use crate::{LkhError, LkhResult, spec_writer::SpecWriter, with_methods_error};
 use lkh_derive::{LkhDisplay, WithMethods};
 
 /// Yes/No wrapper for LKH parameters expressed as `[ YES | NO ]`.
@@ -176,9 +176,10 @@ impl Display for ParameterComment {
 ///
 /// The field docs quote or paraphrase the wording from `LKH-2.0_PARAMETERS.pdf`.
 #[derive(Clone, Debug, WithMethods)]
+#[with(error = LkhError)]
 pub struct LkhParameters {
     /// "Specifies the name of the problem file." (mandatory)
-    problem_file: PathBuf,
+    pub(crate) problem_file: PathBuf,
 
     /// "The number of candidate edges to be associated with each node during the ascent."
     pub ascent_candidates: Option<usize>,
@@ -271,6 +272,8 @@ pub struct LkhParameters {
     /// "Specifies the level of detail of the output given during the solution process."
     pub trace_level: Option<usize>,
 }
+
+with_methods_error!(LkhParametersWithMethodsError);
 
 impl Display for LkhParameters {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -386,9 +389,8 @@ impl LkhParameters {
         }
     }
 
-    pub fn write_to_file(&self, path: &Path) -> LkhResult<()> {
-        fs::write(path, self.to_string())?;
-        Ok(())
+    pub fn write_to_file(&self, file_path: impl Into<PathBuf>) -> LkhResult<()> {
+        fs::write(file_path.into(), self.to_string()).map_err(LkhError::Io)
     }
 }
 
@@ -410,6 +412,25 @@ mod tests {
         skip: Option<u64>,
     }
 
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    enum FixtureError {
+        AlreadySet(&'static str),
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq, WithMethods)]
+    #[with(error = FixtureError)]
+    struct CustomErrorFixture {
+        value: Option<u64>,
+    }
+
+    impl From<CustomErrorFixtureWithMethodsError> for FixtureError {
+        fn from(value: CustomErrorFixtureWithMethodsError) -> Self {
+            match value {
+                CustomErrorFixtureWithMethodsError(field) => Self::AlreadySet(field),
+            }
+        }
+    }
+
     impl SkipFixture {
         fn new() -> Self {
             Self {
@@ -421,6 +442,12 @@ mod tests {
         fn with_skip(mut self, skip: u64) -> Self {
             self.skip = Some(skip);
             self
+        }
+    }
+
+    impl CustomErrorFixture {
+        fn new() -> Self {
+            Self { value: None }
         }
     }
 
@@ -542,5 +569,39 @@ mod tests {
         let fixture = SkipFixture::new().with_keep(11_u8).with_skip(22);
         assert_eq!(fixture.keep, Some(11));
         assert_eq!(fixture.skip, Some(22));
+    }
+
+    #[test]
+    fn try_with_methods_set_option_once() {
+        let cfg = LkhParameters::new("problem.tsp")
+            .try_with_seed(7_u8)
+            .expect("first set should succeed");
+
+        assert_eq!(cfg.seed, Some(7));
+    }
+
+    #[test]
+    fn try_with_methods_fail_when_option_already_set() {
+        let err = LkhParameters::new("problem.tsp")
+            .with_seed(7_u8)
+            .try_with_seed(8_u8)
+            .expect_err("second set should fail");
+
+        match err {
+            super::LkhError::AlreadyAssigned(message) => {
+                assert_eq!(message, "field already set: seed")
+            }
+            other => panic!("expected AlreadyAssigned, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn try_with_methods_support_custom_error_type() {
+        let err = CustomErrorFixture::new()
+            .with_value(1_u8)
+            .try_with_value(2_u8)
+            .expect_err("second set should fail");
+
+        assert_eq!(err, FixtureError::AlreadySet("value"));
     }
 }

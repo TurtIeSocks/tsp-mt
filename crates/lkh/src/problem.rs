@@ -1,13 +1,12 @@
 use std::{
     fmt::{Display, Formatter},
     fs,
-    path::Path,
+    path::PathBuf,
 };
 
-use crate::{LkhResult, spec_writer::SpecWriter};
-use lkh_derive::LkhDisplay;
+use crate::{LkhError, LkhResult, spec_writer::SpecWriter, with_methods_error};
+use lkh_derive::{LkhDisplay, WithMethods};
 
-const EUC2D_SCALE: f64 = 1_000.0;
 const TSPLIB_NODE_ID_BASE: usize = 1;
 const TSPLIB_SECTION_END_MARKER: isize = -1;
 
@@ -189,7 +188,8 @@ impl Display for EdgeDataEntry {
 }
 
 /// Full TSPLIB problem model used by LKH.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, WithMethods)]
+#[with(error = LkhError)]
 pub struct TsplibProblem {
     pub name: String,
     pub problem_type: TsplibProblemType,
@@ -212,10 +212,12 @@ pub struct TsplibProblem {
     pub emit_eof: bool,
 }
 
+with_methods_error!(TsplibProblemWithMethodsError);
+
 impl TsplibProblem {
-    pub fn new(name: impl Into<String>, problem_type: TsplibProblemType) -> Self {
+    pub fn new(problem_type: TsplibProblemType) -> Self {
         Self {
-            name: name.into(),
+            name: "PROBLEM".to_string(),
             problem_type,
             comment_lines: Vec::new(),
             dimension: None,
@@ -237,32 +239,29 @@ impl TsplibProblem {
         }
     }
 
-    pub fn from_euc2d_points<I>(name: impl Into<String>, points: I) -> Self
+    pub fn from_euc2d_points<I>(points: I) -> Self
     where
         I: IntoIterator<Item = (f64, f64)>,
         I::IntoIter: ExactSizeIterator,
     {
         let points = points.into_iter();
 
-        let mut problem = Self::new(name, TsplibProblemType::Tsp);
+        let mut problem = Self::new(TsplibProblemType::Tsp);
         problem.dimension = Some(points.len());
         problem.edge_weight_type = Some(EdgeWeightType::Euc2d);
         problem.node_coord_type = Some(NodeCoordType::TwodCoords);
 
         for (idx, (x, y)) in points.enumerate() {
-            problem.node_coord_section.push(NodeCoord::twod(
-                idx + TSPLIB_NODE_ID_BASE,
-                (x * EUC2D_SCALE).round(),
-                (y * EUC2D_SCALE).round(),
-            ));
+            problem
+                .node_coord_section
+                .push(NodeCoord::twod(idx + TSPLIB_NODE_ID_BASE, x, y));
         }
 
         problem
     }
 
-    pub fn write_to_file(&self, path: &Path) -> LkhResult<()> {
-        fs::write(path, self.to_string())?;
-        Ok(())
+    pub fn write_to_file(&self, file_path: impl Into<PathBuf>) -> LkhResult<()> {
+        fs::write(file_path.into(), self.to_string()).map_err(LkhError::Io)
     }
 }
 
@@ -323,47 +322,42 @@ impl Display for TsplibProblem {
     }
 }
 
-pub struct TsplibProblemWriter;
+// pub struct TsplibProblemWriter;
 
-impl TsplibProblemWriter {
-    pub fn write(path: &Path, problem: &TsplibProblem) -> LkhResult<()> {
-        problem.write_to_file(path)
-    }
+// impl TsplibProblemWriter {
+//     pub fn write(path: &Path, problem: &TsplibProblem) -> LkhResult<()> {
+//         problem.write_to_file(path)
+//     }
 
-    pub fn write_euc2d<I>(path: &Path, name: &str, points: I) -> LkhResult<()>
-    where
-        I: IntoIterator<Item = (f64, f64)>,
-        I::IntoIter: ExactSizeIterator,
-    {
-        let problem = TsplibProblem::from_euc2d_points(name, points);
-        problem.write_to_file(path)
-    }
-}
+//     pub fn write_euc2d<I>(path: &Path, name: &str, points: I) -> LkhResult<()>
+//     where
+//         I: IntoIterator<Item = (f64, f64)>,
+//         I::IntoIter: ExactSizeIterator,
+//     {
+//         let problem = TsplibProblem::from_euc2d_points(name, points);
+//         problem.write_to_file(path)
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs,
-        path::PathBuf,
-        time::{SystemTime, UNIX_EPOCH},
-    };
 
     use super::{
         DisplayDataType, EdgeDataEntry, EdgeDataFormat, EdgeWeightFormat, EdgeWeightType,
-        NodeCoord, NodeCoordType, TsplibProblem, TsplibProblemType, TsplibProblemWriter,
+        NodeCoord, NodeCoordType, TsplibProblem, TsplibProblemType,
     };
 
-    fn unique_temp_dir(name: &str) -> PathBuf {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock should be after epoch")
-            .as_nanos();
-        std::env::temp_dir().join(format!("lkh-tests-{name}-{nanos}"))
-    }
+    // fn unique_temp_dir(name: &str) -> PathBuf {
+    //     let nanos = SystemTime::now()
+    //         .duration_since(UNIX_EPOCH)
+    //         .expect("clock should be after epoch")
+    //         .as_nanos();
+    //     std::env::temp_dir().join(format!("lkh-tests-{name}-{nanos}"))
+    // }
 
     #[test]
     fn display_emits_header_fields_and_sections() {
-        let mut problem = TsplibProblem::new("sample", TsplibProblemType::Tsp);
+        let mut problem = TsplibProblem::new(TsplibProblemType::Tsp);
         problem.comment_lines.push("first".to_string());
         problem.comment_lines.push("second".to_string());
         problem.dimension = Some(3);
@@ -404,7 +398,7 @@ mod tests {
 
     #[test]
     fn display_keeps_headers_before_sections() {
-        let mut problem = TsplibProblem::new("sample", TsplibProblemType::Atsp);
+        let mut problem = TsplibProblem::new(TsplibProblemType::Atsp);
         problem.dimension = Some(2);
         problem.edge_weight_type = Some(EdgeWeightType::Explicit);
         problem.edge_weight_section = vec![vec![0, 1], vec![2, 0]];
@@ -419,28 +413,28 @@ mod tests {
         assert_eq!(lines[4], "EDGE_WEIGHT_SECTION");
     }
 
-    #[test]
-    fn write_euc2d_matches_legacy_rounding_and_ids() {
-        let dir = unique_temp_dir("problem-writer");
-        fs::create_dir_all(&dir).expect("create temp dir");
+    // #[test]
+    // fn write_euc2d_matches_legacy_rounding_and_ids() {
+    //     let dir = unique_temp_dir("problem-writer");
+    //     fs::create_dir_all(&dir).expect("create temp dir");
 
-        let problem_path = dir.join("problem.tsp");
-        TsplibProblemWriter::write_euc2d(
-            &problem_path,
-            "sample",
-            vec![(0.1234, 0.5678), (1.2, 1.8), (9.9994, 0.0004)],
-        )
-        .expect("write problem file");
+    //     let problem_path = dir.join("problem.tsp");
+    //     TsplibProblemWriter::write_euc2d(
+    //         &problem_path,
+    //         "sample",
+    //         vec![(0.1234, 0.5678), (1.2, 1.8), (9.9994, 0.0004)],
+    //     )
+    //     .expect("write problem file");
 
-        let text = fs::read_to_string(&problem_path).expect("read problem file");
-        assert!(text.contains("NAME: sample"));
-        assert!(text.contains("TYPE: TSP"));
-        assert!(text.contains("DIMENSION: 3"));
-        assert!(text.contains("EDGE_WEIGHT_TYPE: EUC_2D"));
-        assert!(text.contains("NODE_COORD_TYPE: TWOD_COORDS"));
-        assert!(text.contains("NODE_COORD_SECTION\n1 123 568\n2 1200 1800\n3 9999 0\n"));
-        assert!(text.ends_with("EOF\n"));
+    //     let text = fs::read_to_string(&problem_path).expect("read problem file");
+    //     assert!(text.contains("NAME: sample"));
+    //     assert!(text.contains("TYPE: TSP"));
+    //     assert!(text.contains("DIMENSION: 3"));
+    //     assert!(text.contains("EDGE_WEIGHT_TYPE: EUC_2D"));
+    //     assert!(text.contains("NODE_COORD_TYPE: TWOD_COORDS"));
+    //     assert!(text.contains("NODE_COORD_SECTION\n1 123 568\n2 1200 1800\n3 9999 0\n"));
+    //     assert!(text.ends_with("EOF\n"));
 
-        fs::remove_dir_all(&dir).expect("cleanup temp dir");
-    }
+    //     fs::remove_dir_all(&dir).expect("cleanup temp dir");
+    // }
 }
