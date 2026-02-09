@@ -22,7 +22,7 @@ const CENTROID_TRACE_LEVEL: usize = 0;
 const MAX_TRIALS_MULTIPLIER: usize = 3;
 const MIN_MAX_TRIALS: usize = 1_000;
 const MAX_MAX_TRIALS: usize = 100_000;
-const TIME_LIMIT_DIVISOR: usize = 512;
+const TIME_LIMIT_DIVISOR: usize = 128;
 const MIN_TIME_LIMIT_SECONDS: usize = 2;
 const THREAD_FALLBACK_PARALLELISM: usize = 2;
 const THREAD_RESERVED_CORES: usize = 1;
@@ -157,6 +157,9 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> LkhResult<V
     validate_points(&input)?;
 
     let points = input.nodes;
+    let projected_points = PlaneProjection::new(&points)
+        .radius(options.projection_radius)
+        .project();
     let run_count = available_seed_runs();
     let max_trials = scaled_max_trials(points.len());
     let time_limit = scaled_time_limit_seconds(points.len());
@@ -170,7 +173,7 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> LkhResult<V
             let run_dir = work_dir.join(format!("seed_{run_idx}"));
             let problem_file = run_dir.join("problem.tsp");
             let tour = LkhSolver::new(
-                build_problem(&points),
+                build_problem(&projected_points),
                 seeded_params(
                     &problem_file,
                     seed,
@@ -213,6 +216,7 @@ pub fn lkh_multi_parallel(input: SolverInput, options: SolverOptions) -> LkhResu
         .project();
     let chunks = h3_chunking::partition_indices(&points, options.max_chunk_size)
         .map_err(|err| LkhError::other(err.to_string()))?;
+
     log::info!(
         "chunker: partitioned n={} chunks={} max_chunk_size={}",
         points.len(),
@@ -229,20 +233,17 @@ pub fn lkh_multi_parallel(input: SolverInput, options: SolverOptions) -> LkhResu
                 return Ok(idxs.to_vec());
             }
 
-            let chunk_points: Vec<LKHNode> = idxs.iter().map(|&idx| points[idx]).collect();
-            let projected_points = PlaneProjection::new(&chunk_points)
-                .radius(options.projection_radius)
-                .project();
-
-            let chunk_dir = work_dir.join(format!("chunk_{chunk_id}"));
-            let problem_file = chunk_dir.join("problem.tsp");
+            let chunk_points: Vec<LKHNode> =
+                idxs.iter().map(|&idx| projected_points[idx]).collect();
             let solver = LkhSolver::new(
-                build_problem(&projected_points),
+                build_problem(&chunk_points),
                 seeded_params(
-                    &problem_file,
+                    &work_dir
+                        .join(format!("chunk_{chunk_id}"))
+                        .join("problem.tsp"),
                     DEFAULT_BASE_SEED,
-                    scaled_max_trials(projected_points.len()),
-                    scaled_time_limit_seconds(projected_points.len()),
+                    scaled_max_trials(chunk_points.len()),
+                    scaled_time_limit_seconds(chunk_points.len()),
                     MULTI_SEED_TRACE_LEVEL,
                 ),
             )?;
