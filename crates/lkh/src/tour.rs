@@ -198,6 +198,12 @@ impl TsplibTour {
     }
 }
 
+impl Default for TsplibTour {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Display for TsplibTour {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut writer = SpecWriter::new(f);
@@ -261,17 +267,16 @@ mod tests {
     }
 
     #[test]
-    fn parse_tsplib_tour_errors_on_wrong_node_count() {
+    fn parse_tsplib_tour_is_permissive_without_dimension_header() {
         let dir = unique_temp_dir("parse-count");
         fs::create_dir_all(&dir).expect("create temp dir");
 
         let tour_path = dir.join("run.tour");
         fs::write(&tour_path, "TOUR_SECTION\n1\n-1\nEOF\n").expect("write tour file");
 
-        let err =
-            TsplibTour::parse_tsplib_tour(&tour_path).expect_err("expected node-count mismatch");
-        let msg = err.to_string();
-        assert!(msg.contains("Expected 2 nodes in tour, got 1"));
+        let parsed =
+            TsplibTour::parse_tsplib_tour(&tour_path).expect("permissive parsing should succeed");
+        assert_eq!(parsed, vec![0]);
 
         fs::remove_dir_all(&dir).expect("cleanup temp dir");
     }

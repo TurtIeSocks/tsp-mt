@@ -6,6 +6,9 @@ build       = "build.rs"
 description = "LKH process/config integration helpers"
 license     = "Apache-2.0"
 readme      = "../../README.md"
+repository  = "https://github.com/rin/tsp-mt"
+homepage    = "https://github.com/rin/tsp-mt"
+documentation = "https://docs.rs/lkh"
 keywords    = ["tsp", "routing", "lkh"]
 categories  = ["algorithms"]
 
@@ -15,4 +18,4 @@ embedded-lkh = []
 
 [dependencies]
 thiserror  = "2.0.18"
-lkh_derive = { path = "../lkh_derive" }
+lkh_derive = { version = "0.1.0", path = "../lkh_derive" }

@@ -379,7 +379,7 @@ mod tests {
         problem.edge_weight_section = vec![vec![0, 7, 3], vec![7, 0, 5], vec![3, 5, 0]];
 
         let text = problem.to_string();
-        assert!(text.contains("NAME: sample"));
+        assert!(text.contains("NAME: PROBLEM"));
         assert!(text.contains("TYPE: TSP"));
         assert!(text.contains("COMMENT: first"));
         assert!(text.contains("DIMENSION: 3"));
@@ -406,7 +406,7 @@ mod tests {
         let text = problem.to_string();
         let lines: Vec<&str> = text.lines().collect();
 
-        assert_eq!(lines[0], "NAME: sample");
+        assert_eq!(lines[0], "NAME: PROBLEM");
         assert_eq!(lines[1], "TYPE: ATSP");
         assert_eq!(lines[2], "DIMENSION: 2");
         assert_eq!(lines[3], "EDGE_WEIGHT_TYPE: EXPLICIT");

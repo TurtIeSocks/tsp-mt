@@ -39,9 +39,9 @@ impl LkhError {
 #[macro_export]
 macro_rules! with_methods_error {
     ($target:ident) => {
-        impl From<$target> for crate::error::LkhError {
+        impl From<$target> for $crate::error::LkhError {
             fn from(value: $target) -> Self {
-                crate::error::LkhError::AlreadyAssigned(value.to_string())
+                $crate::error::LkhError::AlreadyAssigned(value.to_string())
             }
         }
     };
