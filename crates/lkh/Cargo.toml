@@ -19,3 +19,6 @@ embedded-lkh = []
 [dependencies]
 thiserror  = "2.0.18"
 lkh_derive = { version = "0.1.0", path = "../lkh_derive" }
+
+[build-dependencies]
+sha2 = "0.10"

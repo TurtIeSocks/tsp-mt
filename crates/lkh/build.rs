@@ -7,10 +7,18 @@ use std::{
     process::Command,
 };
 
+use sha2::{Digest, Sha256};
+
 const LKH_VERSION: &str = "3.0.13";
-const LKH_URL: &str = "http://akira.ruc.dk/~keld/research/LKH-3/LKH-3.0.13.tgz";
+const LKH_URL: &str = "https://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.0.13.tgz";
+const LKH_HTTP_URL: &str = "http://akira.ruc.dk/~keld/research/LKH-3/LKH-3.0.13.tgz";
+const LKH_HTTP_FALLBACK_URL: &str = "http://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.0.13.tgz";
+const LKH_ARCHIVE_SHA256: &str = "c2bb3974bbeb016d2e45c56eae34bcb35617e28a6d8b1356de159256bc18ecbf";
+const LKH_ARCHIVE_SHA256_ENV: &str = "TSP_MT_LKH_SHA256";
+const LKH_ALLOW_INSECURE_HTTP_ENV: &str = "TSP_MT_ALLOW_INSECURE_HTTP_LKH";
 const LKH_WINDOWS_EXE: &str = "LKH.exe";
-const LKH_WINDOWS_URL: &str = "http://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe";
+const LKH_WINDOWS_URL: &str = "https://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe";
+const LKH_WINDOWS_SHA256_ENV: &str = "TSP_MT_LKH_WINDOWS_EXE_SHA256";
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_EMBEDDED_LKH");
@@ -26,6 +34,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
 
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-env-changed={LKH_ARCHIVE_SHA256_ENV}");
+    println!("cargo:rerun-if-env-changed={LKH_ALLOW_INSECURE_HTTP_ENV}");
+    println!("cargo:rerun-if-env-changed={LKH_WINDOWS_SHA256_ENV}");
 
     if cfg!(target_os = "windows") {
         let root_exe = workspace_root.join(LKH_WINDOWS_EXE);
@@ -57,6 +68,10 @@ fn build_windows(workspace_root: &Path, out_dir: &Path) -> Result<(), Box<dyn Er
             root_exe.display(),
         )
         .into());
+    }
+
+    if let Some(expected) = env_non_empty(LKH_WINDOWS_SHA256_ENV) {
+        verify_sha256(&root_exe, &expected)?;
     }
 
     let bundled_bin = out_dir.join("lkh.bin");
@@ -129,28 +144,47 @@ fn write_if_different(path: &Path, data: &[u8]) -> io::Result<()> {
 
 fn ensure_archive(workspace_root: &Path, archive_path: &Path) -> Result<(), Box<dyn Error>> {
     if archive_path.exists() {
+        verify_archive(archive_path)?;
         return Ok(());
     }
 
     if let Some(cached) = find_cached_archive(workspace_root)? {
+        verify_archive(&cached)?;
         fs::copy(cached, archive_path)?;
-        return Ok(());
-    }
-
-    let url = env::var("TSP_MT_LKH_URL").unwrap_or_else(|_| LKH_URL.to_string());
-    if download_archive(&url, archive_path).is_ok() {
+        verify_archive(archive_path)?;
         return Ok(());
     }
 
     let vendored = workspace_root.join("lkh").join("lkh.tgz");
     if vendored.exists() {
+        verify_archive(&vendored)?;
         fs::copy(&vendored, archive_path)?;
+        verify_archive(archive_path)?;
         return Ok(());
     }
 
+    let mut download_errors = Vec::new();
+    if let Some(url) = env_non_empty("TSP_MT_LKH_URL") {
+        if let Err(err) = try_download_and_verify_archive(&url, archive_path) {
+            download_errors.push(format!("{url}: {err}"));
+        } else {
+            return Ok(());
+        }
+    } else {
+        for url in [LKH_URL, LKH_HTTP_URL, LKH_HTTP_FALLBACK_URL] {
+            if let Err(err) = try_download_and_verify_archive(url, archive_path) {
+                download_errors.push(format!("{url}: {err}"));
+                continue;
+            }
+            return Ok(());
+        }
+    }
+
     Err(format!(
-        "failed to download LKH archive from {url} and no fallback at {}",
-        vendored.display()
+        "failed to download and verify LKH archive. \
+         Tried: {}. place a verified fallback at {} or set TSP_MT_LKH_URL/TSP_MT_LKH_SHA256",
+        download_errors.join(" | "),
+        vendored.display(),
     )
     .into())
 }
@@ -206,6 +240,16 @@ fn download_archive(url: &str, archive_path: &Path) -> io::Result<()> {
     )
 }
 
+fn try_download_and_verify_archive(url: &str, archive_path: &Path) -> Result<(), Box<dyn Error>> {
+    validate_download_url(url)?;
+    download_archive(url, archive_path)?;
+    if let Err(err) = verify_archive(archive_path) {
+        let _ = fs::remove_file(archive_path);
+        return Err(err);
+    }
+    Ok(())
+}
+
 fn run_cmd(cmd: &mut Command, context: &str) -> io::Result<()> {
     let rendered = render_cmd(cmd);
     let out = cmd.output()?;
@@ -232,4 +276,74 @@ fn render_cmd(cmd: &Command) -> String {
     } else {
         format!("{program} {args}")
     }
+}
+
+fn verify_archive(path: &Path) -> Result<(), Box<dyn Error>> {
+    let expected = env::var(LKH_ARCHIVE_SHA256_ENV).unwrap_or_else(|_| LKH_ARCHIVE_SHA256.into());
+    verify_sha256(path, &expected)
+}
+
+fn verify_sha256(path: &Path, expected_hex: &str) -> Result<(), Box<dyn Error>> {
+    let expected = normalize_sha256_hex(expected_hex)?;
+    let bytes = fs::read(path)?;
+    let actual = format!("{:x}", Sha256::digest(&bytes));
+    if actual != expected {
+        return Err(format!(
+            "sha256 mismatch for {}: expected {}, got {}",
+            path.display(),
+            expected,
+            actual
+        )
+        .into());
+    }
+    Ok(())
+}
+
+fn normalize_sha256_hex(raw: &str) -> Result<String, Box<dyn Error>> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    if normalized.len() != 64 || !normalized.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(format!("invalid sha256 value: {raw}").into());
+    }
+    Ok(normalized)
+}
+
+fn validate_download_url(url: &str) -> Result<(), Box<dyn Error>> {
+    if url.starts_with("https://") {
+        return Ok(());
+    }
+
+    if url.starts_with("http://") {
+        if allow_insecure_http() || is_known_default_http_lkh_url(url) {
+            return Ok(());
+        }
+        return Err(format!(
+            "refusing insecure URL '{url}'. \
+             Use HTTPS or set {LKH_ALLOW_INSECURE_HTTP_ENV}=1 to allow HTTP."
+        )
+        .into());
+    }
+
+    Err(format!("unsupported URL scheme for TSP_MT_LKH_URL: {url}").into())
+}
+
+fn is_known_default_http_lkh_url(url: &str) -> bool {
+    matches!(url, LKH_HTTP_URL | LKH_HTTP_FALLBACK_URL)
+}
+
+fn allow_insecure_http() -> bool {
+    env_non_empty(LKH_ALLOW_INSECURE_HTTP_ENV)
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn env_non_empty(name: &str) -> Option<String> {
+    env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
