@@ -1,7 +1,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::Output,
     thread,
 };
 
@@ -205,8 +205,7 @@ impl LkhSolver {
 
         prep_cfg.write_to_file(&prep_par)?;
 
-        let out = self.run(&prep_par)?;
-        LkhProcess::ensure_success(ERR_LKH_PREPROCESS_FAILED, &out)?;
+        self.run(&prep_par, ERR_LKH_PREPROCESS_FAILED)?;
 
         let candidate_file = self.files.problem_candidate();
         if !candidate_file.exists() {
@@ -217,11 +216,9 @@ impl LkhSolver {
         Ok(())
     }
 
-    pub(crate) fn run(&self, par_path: &Path) -> Result<Output> {
-        Command::new(&self.executable)
-            .arg(par_path)
-            .current_dir(self.work_dir())
-            .output()
+    pub(crate) fn run(&self, par_path: &Path, context: impl ToString) -> Result<Output> {
+        LkhProcess::default()
+            .run(par_path, context)
             .map_err(Error::from)
     }
 }
@@ -284,11 +281,9 @@ pub fn solve_tsp_with_lkh_parallel(input: SolverInput, options: SolverOptions) -
 
                 log::debug!("solver.run: start idx={idx} seed={seed}");
 
-                let out = solver.run(&par_path)?;
-
-                LkhProcess::ensure_success(
+                solver.run(
+                    &par_path,
                     &format!("LKH failed (run idx={idx}, seed={seed})"),
-                    &out,
                 )?;
 
                 let tour = TsplibTour::parse_tsplib_tour(&tour_path, points.len())?;

@@ -1,7 +1,6 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Command,
     time::Instant,
 };
 
@@ -89,15 +88,14 @@ impl ChunkSolver {
 
         run_cfg.write_to_file(&run_par)?;
 
-        let out = solver.run(&run_par)?;
-        LkhProcess::ensure_success(ERR_LKH_CHUNK_FAILED, &out)?;
+        solver.run(&run_par, ERR_LKH_CHUNK_FAILED)?;
 
         Ok(TsplibTour::parse_tsplib_tour(&run_tour, n)?)
     }
 
     fn order_by_centroid_tsp(
         &self,
-        lkh_exe: &Path,
+        _lkh_exe: &Path, // TODO: fix
         work_dir: &Path,
         centroids: &[LKHNode],
         options: &SolverOptions,
@@ -138,12 +136,7 @@ impl ChunkSolver {
 
         cfg.write_to_file(&par_path)?;
 
-        let out = Command::new(lkh_exe)
-            .arg(&par_path)
-            .current_dir(work_dir)
-            .output()
-            .map_err(Error::from)?;
-        LkhProcess::ensure_success(ERR_CENTROID_ORDERING_FAILED, &out)?;
+        LkhProcess::default().run(&par_path, ERR_CENTROID_ORDERING_FAILED)?;
 
         log::debug!("chunked.order: done centroids={}", centroids.len());
         Ok(TsplibTour::parse_tsplib_tour(&tour_path, centroids.len())?)

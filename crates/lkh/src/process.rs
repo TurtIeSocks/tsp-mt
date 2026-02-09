@@ -30,23 +30,21 @@ impl Default for LkhProcess {
 }
 
 impl LkhProcess {
-    pub fn run(&self, par_path: &Path) -> LkhResult<Output> {
-        Command::new(&self.exe_path)
+    pub fn run(&self, par_path: &Path, context: impl ToString) -> LkhResult<Output> {
+        let output = Command::new(&self.exe_path)
             .arg(par_path)
             // .current_dir(self.work_dir())
             .output()
-            .map_err(LkhError::from)
-    }
+            .map_err(LkhError::from)?;
 
-    pub fn ensure_success(context: &str, out: &Output) -> LkhResult<()> {
-        if out.status.success() {
-            return Ok(());
+        if output.status.success() {
+            Ok(output)
+        } else {
+            Err(LkhError::ProcessFailed {
+                context: context.to_string(),
+                stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            })
         }
-
-        Err(LkhError::ProcessFailed {
-            context: context.to_string(),
-            stdout: String::from_utf8_lossy(&out.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&out.stderr).to_string(),
-        })
     }
 }

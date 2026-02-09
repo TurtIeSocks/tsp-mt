@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{LkhResult, spec_writer::SpecWriter};
-use lkh_derive::LkhDisplay;
+use lkh_derive::{LkhDisplay, WithMethods};
 
 /// Yes/No wrapper for LKH parameters expressed as `[ YES | NO ]`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, LkhDisplay)]
@@ -175,7 +175,7 @@ impl Display for ParameterComment {
 /// Full LKH-2.0 parameter-file model.
 ///
 /// The field docs quote or paraphrase the wording from `LKH-2.0_PARAMETERS.pdf`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, WithMethods)]
 pub struct LkhParameters {
     /// "Specifies the name of the problem file." (mandatory)
     problem_file: PathBuf,
@@ -386,16 +386,6 @@ impl LkhParameters {
         }
     }
 
-    pub fn with_seed(mut self, seed: u64) -> Self {
-        self.seed = Some(seed);
-        self
-    }
-
-    pub fn with_output_tour_file(mut self, output_tour_file: impl Into<PathBuf>) -> Self {
-        self.output_tour_file = Some(output_tour_file.into());
-        self
-    }
-
     pub fn write_to_file(&self, path: &Path) -> LkhResult<()> {
         fs::write(path, self.to_string())?;
         Ok(())
@@ -411,6 +401,28 @@ mod tests {
         LkhParameters, ParameterComment, PatchingRule, PatchingRuleMode, SubproblemPartitioning,
         SubproblemSpec, YesNo,
     };
+    use lkh_derive::WithMethods;
+
+    #[derive(Clone, Debug, WithMethods)]
+    struct SkipFixture {
+        keep: Option<u64>,
+        #[with(skip)]
+        skip: Option<u64>,
+    }
+
+    impl SkipFixture {
+        fn new() -> Self {
+            Self {
+                keep: None,
+                skip: None,
+            }
+        }
+
+        fn with_skip(mut self, skip: u64) -> Self {
+            self.skip = Some(skip);
+            self
+        }
+    }
 
     #[test]
     fn display_emits_comprehensive_parameter_lines() {
@@ -509,5 +521,26 @@ mod tests {
         let mut sorted = keys[1..].to_vec();
         sorted.sort_unstable();
         assert_eq!(&keys[1..], sorted.as_slice());
+    }
+
+    #[test]
+    fn with_methods_set_fields() {
+        let cfg = LkhParameters::new("problem.tsp")
+            .with_seed(7_u8)
+            .with_output_tour_file("out.tour")
+            .with_emit_eof(true)
+            .with_problem_file("other.tsp");
+
+        assert_eq!(cfg.seed, Some(7));
+        assert_eq!(cfg.output_tour_file, Some(PathBuf::from("out.tour")));
+        assert!(cfg.emit_eof);
+        assert_eq!(cfg.problem_file, PathBuf::from("other.tsp"));
+    }
+
+    #[test]
+    fn with_methods_skip_attr_excludes_method() {
+        let fixture = SkipFixture::new().with_keep(11_u8).with_skip(22);
+        assert_eq!(fixture.keep, Some(11));
+        assert_eq!(fixture.skip, Some(22));
     }
 }
