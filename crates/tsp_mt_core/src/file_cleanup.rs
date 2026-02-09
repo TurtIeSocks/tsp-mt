@@ -29,7 +29,7 @@ fn install_shutdown_hook_once() {
     });
 }
 
-pub(crate) fn register_workdir_for_shutdown_cleanup(work_dir: &Path) {
+pub fn register_workdir_for_shutdown_cleanup(work_dir: &Path) {
     install_shutdown_hook_once();
     if let Ok(mut guard) = shutdown_workdirs().lock() {
         guard.insert(work_dir.to_path_buf());
@@ -44,7 +44,7 @@ fn unregister_workdir_for_shutdown_cleanup(work_dir: &Path) {
     }
 }
 
-pub(crate) fn cleanup_workdir(work_dir: &Path) {
+pub fn cleanup_workdir(work_dir: &Path) {
     if !work_dir.exists() {
         unregister_workdir_for_shutdown_cleanup(work_dir);
         return;

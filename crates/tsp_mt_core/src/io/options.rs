@@ -39,6 +39,8 @@ pub struct SolverOptions {
     /// Solver strategy to run: `single`, `multi-seed`, or `multi-parallel`.
     #[cli(long = "solver-mode", parse_with = "SolverMode::parse")]
     pub solver_mode: SolverMode,
+    /// Whether to remove the solver work directory after the run.
+    pub cleanup: bool,
     /// Window size for boundary-local 2-opt refinement after chunk stitching.
     #[cli(long = "boundary-2opt-window")]
     pub boundary_2opt_window: usize,
@@ -115,6 +117,7 @@ impl Default for SolverOptions {
             centroid_order_max_trials: 20_000,
             centroid_order_time_limit: 10,
             solver_mode: SolverMode::MultiParallel,
+            cleanup: true,
             boundary_2opt_window: 500,
             boundary_2opt_passes: 50,
             outlier_threshold: 10.0,
@@ -191,6 +194,20 @@ impl SolverOptions {
                     }
                     options.log_timestamp = false;
                 }
+                "cleanup" => {
+                    options.cleanup = match value {
+                        Some(v) => parse_bool(&name, &v)?,
+                        None => true,
+                    };
+                }
+                "no-cleanup" => {
+                    if value.is_some() {
+                        return Err(Error::invalid_input(format!(
+                            "Flag --{name} does not take a value"
+                        )));
+                    }
+                    options.cleanup = false;
+                }
                 _ => {
                     return Err(Error::invalid_input(format!(
                         "Unknown option: --{name}\n\n{}",
@@ -223,6 +240,8 @@ impl SolverOptions {
             "  --log-format <compact|pretty>\n",
             "  --log-timestamp[=<bool>]\n",
             "  --no-log-timestamp\n",
+            "  --cleanup[=<bool>]\n",
+            "  --no-cleanup\n",
             "  --log-output <path>\n",
             "  --output <path>\n",
             "  --help\n",
@@ -333,6 +352,7 @@ mod tests {
             "--log-level=debug",
             "--log-format=pretty",
             "--log-timestamp=false",
+            "--cleanup=false",
             "--log-output=run.log",
             "--output=route.txt",
         ])
@@ -350,6 +370,7 @@ mod tests {
         assert_eq!(options.log_level, LogLevel::Debug);
         assert_eq!(options.log_format, LogFormat::Pretty);
         assert!(!options.log_timestamp);
+        assert!(!options.cleanup);
         assert_eq!(options.log_output, "run.log");
         assert_eq!(options.output, "route.txt");
     }
@@ -364,6 +385,19 @@ mod tests {
     #[test]
     fn parse_from_iter_rejects_no_log_timestamp_with_value() {
         let err = SolverOptions::parse_from_iter(["--no-log-timestamp=true"])
+            .expect_err("expected flag value rejection");
+        assert!(err.to_string().contains("does not take a value"));
+    }
+
+    #[test]
+    fn parse_from_iter_accepts_no_cleanup_flag() {
+        let (options, _) = SolverOptions::parse_from_iter(["--no-cleanup"]).expect("parse options");
+        assert!(!options.cleanup);
+    }
+
+    #[test]
+    fn parse_from_iter_rejects_no_cleanup_with_value() {
+        let err = SolverOptions::parse_from_iter(["--no-cleanup=true"])
             .expect_err("expected flag value rejection");
         assert!(err.to_string().contains("does not take a value"));
     }
@@ -411,6 +445,12 @@ mod tests {
     fn solver_mode_defaults_to_multi_parallel() {
         let options = SolverOptions::default();
         assert_eq!(options.solver_mode, SolverMode::MultiParallel);
+    }
+
+    #[test]
+    fn cleanup_defaults_to_true() {
+        let options = SolverOptions::default();
+        assert!(options.cleanup);
     }
 
     #[test]

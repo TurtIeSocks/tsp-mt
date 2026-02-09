@@ -2,12 +2,39 @@ use std::{
     env,
     fs::File,
     io::{Write, stdout},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use log::info;
 
-use tsp_mt_core::{Result, SolverInput, SolverMode, SolverOptions, Tour, logging, runner};
+use tsp_mt_core::{
+    Result, SolverInput, SolverMode, SolverOptions, Tour, file_cleanup, logging, runner,
+};
+
+struct WorkDirCleanupGuard {
+    enabled: bool,
+    work_dir: PathBuf,
+}
+
+impl WorkDirCleanupGuard {
+    fn new(work_dir: &Path, enabled: bool) -> Self {
+        if enabled {
+            file_cleanup::register_workdir_for_shutdown_cleanup(work_dir);
+        }
+        Self {
+            enabled,
+            work_dir: work_dir.to_path_buf(),
+        }
+    }
+}
+
+impl Drop for WorkDirCleanupGuard {
+    fn drop(&mut self) {
+        if self.enabled {
+            file_cleanup::cleanup_workdir(&self.work_dir);
+        }
+    }
+}
 
 fn main() -> Result<()> {
     if env::args()
@@ -30,6 +57,7 @@ fn main_inner(options: SolverOptions) -> Result<()> {
     let input = SolverInput::from_args()?;
     let output_path = options.output_path().map(PathBuf::from);
     let outlier_threshold = options.outlier_threshold;
+    let _cleanup_guard = WorkDirCleanupGuard::new(&options.work_dir, options.cleanup);
 
     info!("input: {input}");
     info!("options: {options}");

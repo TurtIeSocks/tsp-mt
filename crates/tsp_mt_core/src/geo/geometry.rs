@@ -1,5 +1,6 @@
 use crate::node::LKHNode;
 
+#[cfg(test)]
 pub(crate) fn tour_length(points: &[LKHNode], tour: &[usize]) -> f64 {
     let n = tour.len();
     let mut sum = 0.0;
