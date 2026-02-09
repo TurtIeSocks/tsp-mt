@@ -1,6 +1,10 @@
-use std::{fs, path::Path, process::Output};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::{Command, Output},
+};
 
-use crate::{LkhError, LkhResult};
+use crate::{LkhError, LkhResult, embedded_lkh};
 
 const TOUR_SECTION_HEADER: &str = "TOUR_SECTION";
 const TOUR_END_MARKER: &str = "-1";
@@ -8,9 +12,33 @@ const EOF_MARKER: &str = "EOF";
 const MIN_VALID_TSPLIB_NODE_ID: isize = 1;
 const TSPLIB_NODE_ID_OFFSET: usize = 1;
 
-pub struct LkhProcess;
+pub struct LkhProcess {
+    exe_path: PathBuf,
+}
+
+impl Default for LkhProcess {
+    fn default() -> Self {
+        let exe_path = match embedded_lkh::embedded_path() {
+            Ok(p) => p,
+            Err(err) => {
+                eprintln!("Error getting the embedded path: {err}");
+                panic!("Error getting the default embedded path, check stderr")
+            }
+        };
+
+        Self { exe_path }
+    }
+}
 
 impl LkhProcess {
+    pub fn run(&self, par_path: &Path) -> LkhResult<Output> {
+        Command::new(&self.exe_path)
+            .arg(par_path)
+            // .current_dir(self.work_dir())
+            .output()
+            .map_err(LkhError::from)
+    }
+
     pub fn ensure_success(context: &str, out: &Output) -> LkhResult<()> {
         if out.status.success() {
             return Ok(());

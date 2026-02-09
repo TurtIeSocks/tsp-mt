@@ -1,6 +1,6 @@
 use std::{
     collections::HashSet,
-    // fs,
+    fs,
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
@@ -50,15 +50,15 @@ pub(crate) fn cleanup_workdir(work_dir: &Path) {
         return;
     }
 
-    // if let Err(err) = fs::remove_dir_all(work_dir) {
-    //     log::warn!(
-    //         "cleanup: failed to remove workdir={} err={err}",
-    //         work_dir.display()
-    //     );
-    // } else {
-    //     unregister_workdir_for_shutdown_cleanup(work_dir);
-    //     log::debug!("cleanup: removed workdir={}", work_dir.display());no
-    // }
+    if let Err(err) = fs::remove_dir_all(work_dir) {
+        log::warn!(
+            "cleanup: failed to remove workdir={} err={err}",
+            work_dir.display()
+        );
+    } else {
+        unregister_workdir_for_shutdown_cleanup(work_dir);
+        log::debug!("cleanup: removed workdir={}", work_dir.display());
+    }
 }
 
 #[cfg(test)]
