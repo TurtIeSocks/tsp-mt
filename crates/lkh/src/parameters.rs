@@ -497,6 +497,7 @@ impl Display for LkhParameters {
 }
 
 impl LkhParameters {
+    /// Creates a parameter model with the required `PROBLEM_FILE` set.
     pub fn new(problem_file: impl Into<PathBuf>) -> Self {
         Self {
             problem_file: problem_file.into(),
@@ -510,7 +511,7 @@ impl LkhParameters {
             depot: None,
             distance: None,
             edge_files: Vec::new(),
-            emit_eof: false,
+            emit_eof: true,
             excess: None,
             external_salesmen: None,
             extra_candidates: None,
@@ -575,6 +576,7 @@ impl LkhParameters {
         }
     }
 
+    /// Serializes and writes this parameter file to disk.
     pub fn write_to_file(&self, file_path: impl Into<PathBuf>) -> LkhResult<()> {
         fs::write(file_path.into(), self.to_string()).map_err(LkhError::Io)
     }

@@ -42,6 +42,7 @@ pub struct TsplibTour {
 with_methods_error!(TsplibTourWithMethodsError);
 
 impl TsplibTour {
+    /// Creates an empty tour model.
     pub fn new() -> Self {
         Self {
             name: None,
@@ -54,20 +55,24 @@ impl TsplibTour {
         }
     }
 
+    /// Reads and parses a TSPLIB/LKH tour file from disk.
     pub fn from_file(file_path: impl Into<PathBuf>) -> LkhResult<Self> {
         Self::new().parse_from_file(file_path)
     }
 
+    /// Parses a TSPLIB/LKH tour from text content.
     pub fn from_text(text: String) -> LkhResult<Self> {
         Self::parse(text)
     }
 
+    /// Replaces this tour by parsing a file from disk.
     pub fn read_file(&mut self, file_path: impl Into<PathBuf>) -> LkhResult<()> {
         let text = Self::read(file_path)?;
         *self = Self::parse(text)?;
         Ok(())
     }
 
+    /// Parses a tour file and returns only the zero-based node order.
     pub fn parse_tsplib_tour(path: &Path) -> LkhResult<Vec<usize>> {
         Self::new().parse_from_file(path)?.zero_based_tour()
     }
@@ -90,6 +95,7 @@ impl TsplibTour {
         Ok(zero_based)
     }
 
+    /// Serializes and writes this tour to disk.
     pub fn write_to_file(&self, file_path: impl Into<PathBuf>) -> LkhResult<()> {
         fs::write(file_path.into(), self.to_string()).map_err(LkhError::Io)
     }

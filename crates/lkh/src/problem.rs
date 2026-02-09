@@ -415,6 +415,7 @@ pub struct TsplibProblem {
 with_methods_error!(TsplibProblemWithMethodsError);
 
 impl TsplibProblem {
+    /// Creates an empty TSPLIB/LKH problem model for the given `TYPE`.
     pub fn new(problem_type: TsplibProblemType) -> Self {
         Self {
             name: "PROBLEM".to_string(),
@@ -461,6 +462,14 @@ impl TsplibProblem {
         }
     }
 
+    /// Convenience constructor for Euclidean 2D TSP instances.
+    ///
+    /// It sets:
+    /// - `TYPE = TSP`
+    /// - `EDGE_WEIGHT_TYPE = EUC_2D`
+    /// - `NODE_COORD_TYPE = TWOD_COORDS`
+    /// - `DIMENSION = points.len()`
+    /// - `NODE_COORD_SECTION` using 1-based node ids
     pub fn from_euc2d_points<I>(points: I) -> Self
     where
         I: IntoIterator<Item = (f64, f64)>,
@@ -482,6 +491,7 @@ impl TsplibProblem {
         problem
     }
 
+    /// Serializes and writes this problem file to disk.
     pub fn write_to_file(&self, file_path: impl Into<PathBuf>) -> LkhResult<()> {
         fs::write(file_path.into(), self.to_string()).map_err(LkhError::Io)
     }

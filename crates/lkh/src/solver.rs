@@ -1,3 +1,40 @@
+//! Opinionated convenience orchestration for running LKH end-to-end.
+//!
+//! Most of this crate is low-level and composable (`problem`, `parameters`,
+//! `process`, and `tour`). `LkhSolver` is the only opinionated layer: it
+//! picks default file names/locations and orchestrates the write-run-read flow.
+//!
+//! Use this when you want a quick start or a concrete example. If you need
+//! complete control, use the lower-level modules directly.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use lkh::{
+//!     parameters::LkhParameters,
+//!     problem::TsplibProblem,
+//!     solver::LkhSolver,
+//! };
+//!
+//! fn main() -> lkh::LkhResult<()> {
+//!     let problem = TsplibProblem::from_euc2d_points(vec![
+//!         (0.0, 0.0),
+//!         (1.0, 0.0),
+//!         (0.0, 1.0),
+//!     ]);
+//!
+//!     // This opinionated helper expects PROBLEM_FILE to be set in params.
+//!     let params = LkhParameters::new("work/problem.tsp");
+//!     let solver = LkhSolver::new(problem, params)?;
+//!
+//!     // Use an explicit binary path when not relying on embedded-lkh.
+//!     let tour = solver.run_with_exe("/usr/local/bin/LKH")?;
+//!     let order = tour.zero_based_tour()?;
+//!     println!("{order:?}");
+//!     Ok(())
+//! }
+//! ```
+//!
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -19,6 +56,10 @@ const DEFAULT_TOUR_FILE: &str = "problem.tour";
 const DEFAULT_PARAMS_FILE: &str = "problem.par";
 
 impl LkhSolver {
+    /// Builds a new solver with opinionated defaults:
+    ///
+    /// - workdir is derived from `params.problem_file` parent
+    /// - `OUTPUT_TOUR_FILE` defaults to `<workdir>/problem.tour` when omitted
     pub fn new(problem: TsplibProblem, mut params: LkhParameters) -> LkhResult<Self> {
         let workdir = derive_workdir(&params.problem_file);
 
@@ -36,14 +77,17 @@ impl LkhSolver {
     }
 
     #[cfg(feature = "embedded-lkh")]
+    /// Runs LKH using the embedded executable (`embedded-lkh` feature).
     pub fn run(&self) -> LkhResult<TsplibTour> {
         self._run(LkhProcess::try_default()?)
     }
 
+    /// Runs LKH using an explicitly provided executable path.
     pub fn run_with_exe(&self, exe_path: impl Into<PathBuf>) -> LkhResult<TsplibTour> {
         self._run(LkhProcess::new(exe_path))
     }
 
+    /// Changes the working directory and rebases all relative parameter paths.
     pub fn set_workdir(&mut self, workdir: impl Into<PathBuf>) {
         let old_workdir = self.workdir.clone();
         self.workdir = workdir.into();

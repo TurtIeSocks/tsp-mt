@@ -1,3 +1,22 @@
+//! Embedded LKH executable support (`embedded-lkh` feature).
+//!
+//! This module exposes the resolved path of the embedded binary and ensures it
+//! exists on disk before use.
+//!
+//! # Example
+//!
+//! ```no_run
+//! #[cfg(feature = "embedded-lkh")]
+//! fn main() -> lkh::LkhResult<()> {
+//!     let path = lkh::embedded_lkh::embedded_path()?;
+//!     println!("{}", path.display());
+//!     Ok(())
+//! }
+//!
+//! #[cfg(not(feature = "embedded-lkh"))]
+//! fn main() {}
+//! ```
+//!
 use std::{
     env, fs,
     io::Write,
@@ -17,6 +36,10 @@ const EXECUTABLE_SUFFIX: &str = "";
 
 static LKH_EXECUTABLE_PATH: OnceLock<PathBuf> = OnceLock::new();
 
+/// Returns the extracted path of the embedded LKH executable.
+///
+/// On first call, the executable bytes are written to a temp location and
+/// verified; subsequent calls return the cached path.
 pub fn embedded_path() -> LkhResult<PathBuf> {
     if let Some(path) = LKH_EXECUTABLE_PATH.get() {
         return Ok(path.clone());
