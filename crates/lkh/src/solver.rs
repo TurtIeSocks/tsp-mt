@@ -38,7 +38,7 @@ impl LkhSolver {
 
     #[cfg(feature = "embedded-lkh")]
     pub fn run(&self) -> LkhResult<TsplibTour> {
-        self._run(LkhProcess::default())
+        self._run(LkhProcess::try_default()?)
     }
 
     pub fn run_with_exe(&self, exe_path: impl Into<PathBuf>) -> LkhResult<TsplibTour> {

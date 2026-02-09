@@ -42,22 +42,19 @@ impl LkhProcess {
             })
         }
     }
+
+    #[cfg(feature = "embedded-lkh")]
+    pub fn try_default() -> LkhResult<Self> {
+        Ok(Self {
+            exe_path: embedded_lkh::embedded_path()?,
+            context: None,
+        })
+    }
 }
 
 #[cfg(feature = "embedded-lkh")]
 impl Default for LkhProcess {
     fn default() -> Self {
-        let exe_path = match embedded_lkh::embedded_path() {
-            Ok(p) => p,
-            Err(err) => {
-                eprintln!("Error getting the embedded path: {err}");
-                panic!("Error getting the default embedded path, check stderr")
-            }
-        };
-
-        Self {
-            exe_path,
-            context: None,
-        }
+        Self::try_default().expect("failed to initialize default embedded LKH process")
     }
 }
