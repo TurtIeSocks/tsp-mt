@@ -1,3 +1,8 @@
+//! LKH parameter-file (`.par`) model and writer.
+//!
+//! For a full key/value format reference for this crate, see:
+//! `crates/lkh/docs/PAR_SPEC.md`.
+
 use std::{
     fmt::{Display, Formatter},
     fs,

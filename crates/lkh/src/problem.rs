@@ -1,3 +1,8 @@
+//! TSPLIB problem-file model and writer.
+//!
+//! For the TSPLIB fields and sections supported by this crate, see:
+//! `crates/lkh/docs/TSPLIB_SPEC.md`.
+
 use std::{
     fmt::{Display, Formatter},
     fs,

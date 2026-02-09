@@ -1,3 +1,8 @@
+//! TSPLIB tour-file parser/writer.
+//!
+//! For the exact parsing and formatting behavior, see:
+//! `crates/lkh/docs/TSPLIB_SPEC.md`.
+
 use std::{
     fmt::{Display, Formatter},
     fs,
