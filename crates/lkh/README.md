@@ -1,6 +1,7 @@
 # `lkh` crate
 
 Typed Rust helpers for working with [LKH](http://akira.ruc.dk/~keld/research/LKH/):
+
 - TSPLIB problem modeling/writing
 - LKH parameter file modeling/writing
 - LKH process execution
@@ -12,6 +13,7 @@ workspace.
 ## File Format Specs
 
 - LKH parameter file spec: [`docs/PAR_SPEC.md`](docs/PAR_SPEC.md)
+  - Includes modeled keys, value shapes, upstream defaults, and abbreviation notes.
 - TSPLIB problem/tour spec: [`docs/TSPLIB_SPEC.md`](docs/TSPLIB_SPEC.md)
 
 ## Features
