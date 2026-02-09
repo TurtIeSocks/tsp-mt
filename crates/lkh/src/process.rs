@@ -14,6 +14,7 @@ use crate::{LkhError, LkhResult, with_methods_error};
 pub struct LkhProcess {
     exe_path: PathBuf,
     context: Option<String>,
+    current_dir: Option<PathBuf>,
 }
 
 with_methods_error!(LkhProcessWithMethodsError);
@@ -23,11 +24,17 @@ impl LkhProcess {
         Self {
             exe_path: exe_path.into(),
             context: None,
+            current_dir: None,
         }
     }
 
     pub fn run(&self, par_file_path: impl Into<PathBuf>) -> LkhResult<Output> {
-        let output = Command::new(&self.exe_path)
+        let mut command = Command::new(&self.exe_path);
+        if let Some(current_dir) = &self.current_dir {
+            command.current_dir(current_dir);
+        }
+
+        let output = command
             .arg(par_file_path.into())
             .output()
             .map_err(LkhError::from)?;
@@ -48,6 +55,7 @@ impl LkhProcess {
         Ok(Self {
             exe_path: embedded_lkh::embedded_path()?,
             context: None,
+            current_dir: None,
         })
     }
 }

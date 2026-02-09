@@ -64,13 +64,11 @@ impl TsplibTour {
         Self::new().parse_from_file(path)?.zero_based_tour()
     }
 
+    /// Returns the tour converted from TSPLIB's 1-based ids to 0-based ids.
+    ///
+    /// Parsing is intentionally permissive: unknown headers are ignored and
+    /// non-positive node ids in `TOUR_SECTION` (except the `-1` terminator) are skipped.
     pub fn zero_based_tour(&self) -> LkhResult<Vec<usize>> {
-        // if self.tour_section.len() != n {
-        //     return Err(LkhError::invalid_data(format!(
-        //         "Expected {n} nodes in tour, got {}",
-        //         self.tour_section.len()
-        //     )));
-        // }
         let mut zero_based = Vec::with_capacity(self.tour_section.len());
         for &id in &self.tour_section {
             if id < TSPLIB_NODE_ID_OFFSET {
@@ -277,6 +275,21 @@ mod tests {
         let parsed =
             TsplibTour::parse_tsplib_tour(&tour_path).expect("permissive parsing should succeed");
         assert_eq!(parsed, vec![0]);
+
+        fs::remove_dir_all(&dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn parse_tsplib_tour_skips_non_positive_non_terminator_ids() {
+        let dir = unique_temp_dir("parse-non-positive");
+        fs::create_dir_all(&dir).expect("create temp dir");
+
+        let tour_path = dir.join("run.tour");
+        fs::write(&tour_path, "TOUR_SECTION\n0\n-5\n2\n1\n-1\nEOF\n").expect("write tour file");
+
+        let parsed =
+            TsplibTour::parse_tsplib_tour(&tour_path).expect("permissive parsing should succeed");
+        assert_eq!(parsed, vec![1, 0]);
 
         fs::remove_dir_all(&dir).expect("cleanup temp dir");
     }

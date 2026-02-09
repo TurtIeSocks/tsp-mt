@@ -172,8 +172,6 @@ pub enum EdgeDataEntry {
 
 impl Display for EdgeDataEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // let x: Vec<i64> = vec![1, 2, 3, 4];
-        // let y = x.join(" ");
         match self {
             Self::Edge { from, to } => write!(f, "{from} {to}"),
             Self::AdjList { node, neighbors } => {
@@ -322,23 +320,6 @@ impl Display for TsplibProblem {
     }
 }
 
-// pub struct TsplibProblemWriter;
-
-// impl TsplibProblemWriter {
-//     pub fn write(path: &Path, problem: &TsplibProblem) -> LkhResult<()> {
-//         problem.write_to_file(path)
-//     }
-
-//     pub fn write_euc2d<I>(path: &Path, name: &str, points: I) -> LkhResult<()>
-//     where
-//         I: IntoIterator<Item = (f64, f64)>,
-//         I::IntoIter: ExactSizeIterator,
-//     {
-//         let problem = TsplibProblem::from_euc2d_points(name, points);
-//         problem.write_to_file(path)
-//     }
-// }
-
 #[cfg(test)]
 mod tests {
 
@@ -346,14 +327,6 @@ mod tests {
         DisplayDataType, EdgeDataEntry, EdgeDataFormat, EdgeWeightFormat, EdgeWeightType,
         NodeCoord, NodeCoordType, TsplibProblem, TsplibProblemType,
     };
-
-    // fn unique_temp_dir(name: &str) -> PathBuf {
-    //     let nanos = SystemTime::now()
-    //         .duration_since(UNIX_EPOCH)
-    //         .expect("clock should be after epoch")
-    //         .as_nanos();
-    //     std::env::temp_dir().join(format!("lkh-tests-{name}-{nanos}"))
-    // }
 
     #[test]
     fn display_emits_header_fields_and_sections() {
@@ -412,29 +385,4 @@ mod tests {
         assert_eq!(lines[3], "EDGE_WEIGHT_TYPE: EXPLICIT");
         assert_eq!(lines[4], "EDGE_WEIGHT_SECTION");
     }
-
-    // #[test]
-    // fn write_euc2d_matches_legacy_rounding_and_ids() {
-    //     let dir = unique_temp_dir("problem-writer");
-    //     fs::create_dir_all(&dir).expect("create temp dir");
-
-    //     let problem_path = dir.join("problem.tsp");
-    //     TsplibProblemWriter::write_euc2d(
-    //         &problem_path,
-    //         "sample",
-    //         vec![(0.1234, 0.5678), (1.2, 1.8), (9.9994, 0.0004)],
-    //     )
-    //     .expect("write problem file");
-
-    //     let text = fs::read_to_string(&problem_path).expect("read problem file");
-    //     assert!(text.contains("NAME: sample"));
-    //     assert!(text.contains("TYPE: TSP"));
-    //     assert!(text.contains("DIMENSION: 3"));
-    //     assert!(text.contains("EDGE_WEIGHT_TYPE: EUC_2D"));
-    //     assert!(text.contains("NODE_COORD_TYPE: TWOD_COORDS"));
-    //     assert!(text.contains("NODE_COORD_SECTION\n1 123 568\n2 1200 1800\n3 9999 0\n"));
-    //     assert!(text.ends_with("EOF\n"));
-
-    //     fs::remove_dir_all(&dir).expect("cleanup temp dir");
-    // }
 }
