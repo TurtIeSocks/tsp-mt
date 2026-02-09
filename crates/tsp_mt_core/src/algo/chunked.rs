@@ -5,6 +5,7 @@ use std::{
     time::Instant,
 };
 
+use lkh::tour::TsplibTour;
 use rayon::prelude::*;
 
 use crate::{
@@ -90,7 +91,7 @@ impl ChunkSolver {
         let out = solver.run(&run_par)?;
         LkhProcess::ensure_success(ERR_LKH_CHUNK_FAILED, &out)?;
 
-        Ok(LkhProcess::parse_tsplib_tour(&run_tour, n)?)
+        Ok(TsplibTour::parse_tsplib_tour(&run_tour, n)?)
     }
 
     fn order_by_centroid_tsp(
@@ -144,7 +145,7 @@ impl ChunkSolver {
         LkhProcess::ensure_success(ERR_CENTROID_ORDERING_FAILED, &out)?;
 
         log::debug!("chunked.order: done centroids={}", centroids.len());
-        Ok(LkhProcess::parse_tsplib_tour(&tour_path, centroids.len())?)
+        Ok(TsplibTour::parse_tsplib_tour(&tour_path, centroids.len())?)
     }
 }
 

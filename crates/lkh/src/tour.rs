@@ -1,0 +1,309 @@
+use std::{
+    fmt::{Display, Formatter},
+    fs,
+    path::Path,
+};
+
+use crate::{LkhError, LkhResult, spec_writer::SpecWriter};
+use lkh_derive::LkhDisplay;
+
+const TOUR_SECTION_HEADER: &str = "TOUR_SECTION";
+const TOUR_END_MARKER: &str = "-1";
+const EOF_MARKER: &str = "EOF";
+const MIN_VALID_TSPLIB_NODE_ID: isize = 1;
+const TSPLIB_NODE_ID_OFFSET: usize = 1;
+
+/// TSPLIB `.tour` `TYPE` values.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, LkhDisplay)]
+pub enum TsplibTourType {
+    Tour,
+}
+
+/// TSPLIB `.tour` file model.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TsplibTour {
+    pub name: Option<String>,
+    pub comment_lines: Vec<String>,
+    pub tour_type: Option<TsplibTourType>,
+    pub dimension: Option<usize>,
+    /// Node identifiers exactly as stored in TSPLIB (1-based).
+    pub tour_section: Vec<usize>,
+    pub emit_eof: bool,
+}
+
+impl TsplibTour {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn parse_from_file(path: &Path) -> LkhResult<Self> {
+        let text = fs::read_to_string(path)?;
+        Self::parse(&text)
+    }
+
+    pub fn parse(text: &str) -> LkhResult<Self> {
+        let mut tour = Self::new();
+        tour.emit_eof = false;
+        let mut in_tour_section = false;
+        let mut tour_terminated = false;
+
+        for raw_line in text.lines() {
+            let line = raw_line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            if line.eq_ignore_ascii_case(EOF_MARKER) {
+                tour.emit_eof = true;
+                break;
+            }
+
+            if !in_tour_section {
+                if line.eq_ignore_ascii_case(TOUR_SECTION_HEADER) {
+                    in_tour_section = true;
+                    continue;
+                }
+
+                if let Some((key, value)) = line
+                    .split_once(':')
+                    .map(|(key, value)| (key.trim().to_ascii_uppercase(), value.trim()))
+                {
+                    match key.as_str() {
+                        "NAME" => {
+                            tour.name = Some(value.to_string());
+                        }
+                        "COMMENT" => {
+                            tour.comment_lines.push(value.to_string());
+                        }
+                        "TYPE" => {
+                            if value.eq_ignore_ascii_case("TOUR") {
+                                tour.tour_type = Some(TsplibTourType::Tour);
+                            } else {
+                                return Err(LkhError::invalid_data(format!(
+                                    "Unsupported tour TYPE '{value}'"
+                                )));
+                            }
+                        }
+                        "DIMENSION" => {
+                            let parsed = value.parse::<usize>().map_err(|e| {
+                                LkhError::invalid_data(format!(
+                                    "Bad DIMENSION value '{value}': {e}"
+                                ))
+                            })?;
+                            tour.dimension = Some(parsed);
+                        }
+                        _ => {}
+                    }
+                }
+
+                continue;
+            }
+
+            for token in line.split_whitespace() {
+                if token == TOUR_END_MARKER {
+                    tour_terminated = true;
+                    break;
+                }
+                if token.eq_ignore_ascii_case(EOF_MARKER) {
+                    tour.emit_eof = true;
+                    tour_terminated = true;
+                    break;
+                }
+
+                let id: isize = token.parse().map_err(|e| {
+                    LkhError::invalid_data(format!("Bad tour token '{token}': {e}"))
+                })?;
+
+                if id < MIN_VALID_TSPLIB_NODE_ID {
+                    continue;
+                }
+                tour.tour_section.push(id as usize);
+            }
+
+            if tour_terminated {
+                break;
+            }
+        }
+
+        if !in_tour_section {
+            return Err(LkhError::invalid_data("Missing TOUR_SECTION"));
+        }
+
+        if let Some(dimension) = tour.dimension
+            && dimension != tour.tour_section.len()
+        {
+            return Err(LkhError::invalid_data(format!(
+                "DIMENSION is {dimension}, but TOUR_SECTION has {} nodes",
+                tour.tour_section.len()
+            )));
+        }
+
+        Ok(tour)
+    }
+
+    pub fn parse_tsplib_tour(path: &Path, n: usize) -> LkhResult<Vec<usize>> {
+        Self::parse_from_file(path)?.to_zero_based_tour(n)
+    }
+
+    pub fn to_zero_based_tour(&self, n: usize) -> LkhResult<Vec<usize>> {
+        if self.tour_section.len() != n {
+            return Err(LkhError::invalid_data(format!(
+                "Expected {n} nodes in tour, got {}",
+                self.tour_section.len()
+            )));
+        }
+
+        let mut zero_based = Vec::with_capacity(self.tour_section.len());
+        for &id in &self.tour_section {
+            if id < TSPLIB_NODE_ID_OFFSET {
+                return Err(LkhError::invalid_data(format!(
+                    "Bad node id {id}; TSPLIB ids must be >= {TSPLIB_NODE_ID_OFFSET}"
+                )));
+            }
+            zero_based.push(id - TSPLIB_NODE_ID_OFFSET);
+        }
+
+        Ok(zero_based)
+    }
+
+    pub fn write_to_file(&self, path: &Path) -> LkhResult<()> {
+        fs::write(path, self.to_string())?;
+        Ok(())
+    }
+}
+
+impl Default for TsplibTour {
+    fn default() -> Self {
+        Self {
+            name: None,
+            comment_lines: Vec::new(),
+            tour_type: None,
+            dimension: None,
+            tour_section: Vec::new(),
+            emit_eof: true,
+        }
+    }
+}
+
+impl Display for TsplibTour {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut writer = SpecWriter::new(f);
+
+        writer.opt_kv_colon("NAME", self.name.as_deref())?;
+        writer.opt_kv_colon("TYPE", self.tour_type)?;
+
+        for comment in &self.comment_lines {
+            writer.kv_colon("COMMENT", comment)?;
+        }
+
+        writer.opt_kv_colon("DIMENSION", self.dimension)?;
+
+        if !self.tour_section.is_empty() {
+            writer.lines(TOUR_SECTION_HEADER, &self.tour_section)?;
+            writer.line(TOUR_END_MARKER)?;
+        }
+
+        if self.emit_eof {
+            writer.line(EOF_MARKER)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use super::{TsplibTour, TsplibTourType};
+
+    fn unique_temp_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("lkh-tests-{name}-{nanos}"))
+    }
+
+    #[test]
+    fn parse_tsplib_tour_reads_tour_section_and_converts_to_zero_based() {
+        let dir = unique_temp_dir("parse-ok");
+        fs::create_dir_all(&dir).expect("create temp dir");
+
+        let tour_path = dir.join("run.tour");
+        fs::write(
+            &tour_path,
+            "NAME : test\nTYPE : TOUR\nDIMENSION : 3\nTOUR_SECTION\n2\n1\n3\n-1\nEOF\n",
+        )
+        .expect("write tour file");
+
+        let parsed = TsplibTour::parse_tsplib_tour(&tour_path, 3).expect("parse tsplib tour");
+        assert_eq!(parsed, vec![1, 0, 2]);
+
+        fs::remove_dir_all(&dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn parse_tsplib_tour_errors_on_wrong_node_count() {
+        let dir = unique_temp_dir("parse-count");
+        fs::create_dir_all(&dir).expect("create temp dir");
+
+        let tour_path = dir.join("run.tour");
+        fs::write(&tour_path, "TOUR_SECTION\n1\n-1\nEOF\n").expect("write tour file");
+
+        let err =
+            TsplibTour::parse_tsplib_tour(&tour_path, 2).expect_err("expected node-count mismatch");
+        let msg = err.to_string();
+        assert!(msg.contains("Expected 2 nodes in tour, got 1"));
+
+        fs::remove_dir_all(&dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn parse_reads_headers_from_lkh_tour_output() {
+        let text = r#"
+NAME : problem.111984.tour
+COMMENT : Length = 111984
+COMMENT : Found by LKH-3 [Keld Helsgaun] Sun Feb  8 16:58:45 2026
+TYPE : TOUR
+DIMENSION : 4
+TOUR_SECTION
+1
+3
+2
+4
+-1
+EOF
+"#;
+
+        let tour = TsplibTour::parse(text).expect("parse tour");
+        assert_eq!(tour.name.as_deref(), Some("problem.111984.tour"));
+        assert_eq!(tour.comment_lines.len(), 2);
+        assert_eq!(tour.tour_type, Some(TsplibTourType::Tour));
+        assert_eq!(tour.dimension, Some(4));
+        assert_eq!(tour.tour_section, vec![1, 3, 2, 4]);
+    }
+
+    #[test]
+    fn display_writes_tsplib_tour_format() {
+        let mut tour = TsplibTour::new();
+        tour.name = Some("sample.tour".to_string());
+        tour.comment_lines.push("Length = 42".to_string());
+        tour.tour_type = Some(TsplibTourType::Tour);
+        tour.dimension = Some(3);
+        tour.tour_section = vec![1, 2, 3];
+
+        let text = tour.to_string();
+
+        assert!(text.contains("NAME: sample.tour"));
+        assert!(text.contains("TYPE: TOUR"));
+        assert!(text.contains("COMMENT: Length = 42"));
+        assert!(text.contains("DIMENSION: 3"));
+        assert!(text.contains("TOUR_SECTION\n1\n2\n3\n-1\n"));
+        assert!(text.ends_with("EOF\n"));
+    }
+}

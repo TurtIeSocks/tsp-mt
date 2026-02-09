@@ -5,6 +5,7 @@ use std::{
     thread,
 };
 
+use lkh::tour::TsplibTour;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use rayon::prelude::*;
 
@@ -289,7 +290,7 @@ pub fn solve_tsp_with_lkh_parallel(input: SolverInput, options: SolverOptions) -
                     &out,
                 )?;
 
-                let tour = LkhProcess::parse_tsplib_tour(&tour_path, points.len())?;
+                let tour = TsplibTour::parse_tsplib_tour(&tour_path, points.len())?;
                 let len = geometry::tour_length(&points, &tour);
 
                 log::debug!("solver.run: done idx={idx} seed={seed} tour_m={len:.0}");

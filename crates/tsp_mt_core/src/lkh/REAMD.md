@@ -13,6 +13,8 @@
 - `process.rs`
   - Defines `LkhProcess`.
   - `ensure_success(...)` wraps process status + stdout/stderr into `Error::ProcessFailed`.
+- `tour.rs` (in the `lkh` crate)
+  - Defines `TsplibTour`.
   - `parse_tsplib_tour(...)` parses TSPLIB `TOUR_SECTION` into zero-based indices.
 - `solver.rs`
   - Defines `LkhSolver` and `solve_tsp_with_lkh_parallel(...)`.
@@ -42,7 +44,7 @@ Entry point: `solve_tsp_with_lkh_parallel(input, options)` in `solver.rs`.
    - Clone config and set run-specific `SEED` + `OUTPUT_TOUR_FILE`.
    - Write `run_{idx}.par`.
    - Execute LKH.
-   - Parse `run_{idx}.tour` via `LkhProcess::parse_tsplib_tour(...)`.
+   - Parse `run_{idx}.tour` via `TsplibTour::parse_tsplib_tour(...)`.
    - Score tour length.
 1. Pick best run by total distance and return ordered `Tour`.
 1. Cleanup work dir.
@@ -88,4 +90,4 @@ So chunked and non-chunked modes share the same config rendering and tour parsin
 
 - Add or adjust parameter behavior in `LkhConfig` first.
 - Keep solver/chunked code focused on orchestration (file paths, process execution, selection).
-- Reuse `LkhProcess::parse_tsplib_tour(...)` for any new tour read path.
+- Reuse `TsplibTour::parse_tsplib_tour(...)` for any new tour read path.
