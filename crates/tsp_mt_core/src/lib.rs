@@ -18,6 +18,6 @@ pub(crate) use io::options;
 
 pub use error::{Error, Result};
 pub use io::input::SolverInput;
-pub use io::options::SolverOptions;
+pub use io::options::{SolverMode, SolverOptions};
 pub use node::LKHNode;
 pub use tour::Tour;

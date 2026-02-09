@@ -36,6 +36,9 @@ pub struct SolverOptions {
     /// `TIME_LIMIT` (seconds) for centroid-ordering LKH run.
     #[cli(long = "centroid-order-time-limit")]
     pub centroid_order_time_limit: usize,
+    /// Solver strategy to run: `single`, `multi-seed`, or `multi-parallel`.
+    #[cli(long = "solver-mode", parse_with = "SolverMode::parse")]
+    pub solver_mode: SolverMode,
     /// Window size for boundary-local 2-opt refinement after chunk stitching.
     #[cli(long = "boundary-2opt-window")]
     pub boundary_2opt_window: usize,
@@ -93,6 +96,14 @@ pub enum LogFormat {
     Pretty,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, CliValue)]
+#[cli_value(option = "solver-mode")]
+pub enum SolverMode {
+    Single,
+    MultiSeed,
+    MultiParallel,
+}
+
 impl Default for SolverOptions {
     fn default() -> Self {
         Self {
@@ -103,6 +114,7 @@ impl Default for SolverOptions {
             centroid_order_seed: 999,
             centroid_order_max_trials: 20_000,
             centroid_order_time_limit: 10,
+            solver_mode: SolverMode::MultiParallel,
             boundary_2opt_window: 500,
             boundary_2opt_passes: 50,
             outlier_threshold: 10.0,
@@ -203,6 +215,7 @@ impl SolverOptions {
             "  --centroid-order-seed <u64>\n",
             "  --centroid-order-max-trials <usize>\n",
             "  --centroid-order-time-limit <usize>\n",
+            "  --solver-mode <single|multi-seed|multi-parallel>\n",
             "  --boundary-2opt-window <usize>\n",
             "  --boundary-2opt-passes <usize>\n",
             "  --outlier-threshold <f64>\n",
@@ -218,6 +231,7 @@ impl SolverOptions {
             "  tsp-mt --max-chunk-size 2000 --log-level warn --output output.txt < points.txt\n",
             "  tsp-mt --log-level=info --log-output run.log < points.txt\n",
             "  tsp-mt --log-level=debug --log-format=pretty --log-timestamp < points.txt\n",
+            "  tsp-mt --solver-mode=multi-seed --log-level=info < points.txt\n",
             "  tsp-mt --projection-radius=100 --log-level=info < points.txt\n",
         )
     }
@@ -267,7 +281,7 @@ fn parse_bool(name: &str, value: &str) -> Result<bool> {
 mod tests {
     use log::LevelFilter;
 
-    use super::{LogFormat, LogLevel, SolverOptions, parse_bool};
+    use super::{LogFormat, LogLevel, SolverMode, SolverOptions, parse_bool};
 
     #[test]
     fn parse_bool_accepts_common_true_values() {
@@ -312,6 +326,7 @@ mod tests {
             "--centroid-order-seed=77",
             "--centroid-order-max-trials=200",
             "--centroid-order-time-limit=9",
+            "--solver-mode=single",
             "--boundary-2opt-window=8",
             "--boundary-2opt-passes=7",
             "--outlier-threshold=12.5",
@@ -328,6 +343,7 @@ mod tests {
         assert_eq!(options.centroid_order_seed, 77);
         assert_eq!(options.centroid_order_max_trials, 200);
         assert_eq!(options.centroid_order_time_limit, 9);
+        assert_eq!(options.solver_mode, SolverMode::Single);
         assert_eq!(options.boundary_2opt_window, 8);
         assert_eq!(options.boundary_2opt_passes, 7);
         assert_eq!(options.outlier_threshold, 12.5);
@@ -389,6 +405,12 @@ mod tests {
         let err =
             SolverOptions::parse_from_iter(["--help"]).expect_err("help should short-circuit");
         assert!(err.to_string().contains("Usage:"));
+    }
+
+    #[test]
+    fn solver_mode_defaults_to_multi_parallel() {
+        let options = SolverOptions::default();
+        assert_eq!(options.solver_mode, SolverMode::MultiParallel);
     }
 
     #[test]
