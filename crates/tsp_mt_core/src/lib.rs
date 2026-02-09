@@ -9,13 +9,13 @@ mod geo;
 mod io;
 pub mod logging;
 mod node;
-pub mod runner;
 mod tour;
 
 pub(crate) use algo::{h3_chunking, stitching};
 pub(crate) use geo::{geometry, projection};
 pub(crate) use io::options;
 
+pub use algo::runner;
 pub use error::{Error, Result};
 pub use io::input::SolverInput;
 pub use io::options::{SolverMode, SolverOptions};
