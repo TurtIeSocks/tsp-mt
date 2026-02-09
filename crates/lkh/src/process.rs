@@ -1,6 +1,6 @@
 use std::{fs, path::Path, process::Output};
 
-use crate::{Error, Result};
+use crate::{LkhError, LkhResult};
 
 const TOUR_SECTION_HEADER: &str = "TOUR_SECTION";
 const TOUR_END_MARKER: &str = "-1";
@@ -8,22 +8,22 @@ const EOF_MARKER: &str = "EOF";
 const MIN_VALID_TSPLIB_NODE_ID: isize = 1;
 const TSPLIB_NODE_ID_OFFSET: usize = 1;
 
-pub(crate) struct LkhProcess;
+pub struct LkhProcess;
 
 impl LkhProcess {
-    pub(crate) fn ensure_success(context: &str, out: &Output) -> Result<()> {
+    pub fn ensure_success(context: &str, out: &Output) -> LkhResult<()> {
         if out.status.success() {
             return Ok(());
         }
 
-        Err(Error::ProcessFailed {
+        Err(LkhError::ProcessFailed {
             context: context.to_string(),
             stdout: String::from_utf8_lossy(&out.stdout).to_string(),
             stderr: String::from_utf8_lossy(&out.stderr).to_string(),
         })
     }
 
-    pub(crate) fn parse_tsplib_tour(path: &Path, n: usize) -> Result<Vec<usize>> {
+    pub fn parse_tsplib_tour(path: &Path, n: usize) -> LkhResult<Vec<usize>> {
         let text = fs::read_to_string(path)?;
         let mut in_section = false;
         let mut tour: Vec<usize> = Vec::with_capacity(n);
@@ -42,7 +42,7 @@ impl LkhProcess {
             }
             let id: isize = line
                 .parse()
-                .map_err(|e| Error::invalid_data(format!("Bad tour line '{line}': {e}")))?;
+                .map_err(|e| LkhError::invalid_data(format!("Bad tour line '{line}': {e}")))?;
             if id < MIN_VALID_TSPLIB_NODE_ID {
                 continue;
             }
@@ -50,7 +50,7 @@ impl LkhProcess {
         }
 
         if tour.len() != n {
-            return Err(Error::invalid_data(format!(
+            return Err(LkhError::invalid_data(format!(
                 "Expected {n} nodes in tour, got {}",
                 tour.len()
             )));
@@ -75,7 +75,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock should be after epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("tsp-mt-tests-{name}-{nanos}"))
+        std::env::temp_dir().join(format!("lkh-tests-{name}-{nanos}"))
     }
 
     #[test]

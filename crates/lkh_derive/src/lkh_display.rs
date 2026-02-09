@@ -2,10 +2,10 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, LitStr, parse_macro_input, spanned::Spanned};
 
-fn default_lkh_value(variant_ident: &syn::Ident) -> String {
+fn default_lkh_value(variant_ident: &syn::Ident, separator: &str) -> String {
     let name = variant_ident.to_string();
     let chars: Vec<char> = name.chars().collect();
-    let mut out = String::with_capacity(chars.len() * 2);
+    let mut out = String::with_capacity(chars.len() * (separator.len().max(1) + 1));
 
     for (idx, ch) in chars.iter().copied().enumerate() {
         if idx > 0 {
@@ -17,7 +17,7 @@ fn default_lkh_value(variant_ident: &syn::Ident) -> String {
                     || (prev.is_ascii_uppercase() && next.is_some_and(|n| n.is_ascii_lowercase())));
 
             if is_word_boundary {
-                out.push('-');
+                out.push_str(separator);
             }
         }
 
@@ -27,9 +27,35 @@ fn default_lkh_value(variant_ident: &syn::Ident) -> String {
     out
 }
 
-pub fn derive_as_lkh_inner(item: TokenStream) -> TokenStream {
+fn parse_container_separator(input: &DeriveInput) -> syn::Result<String> {
+    let mut separator = "-".to_string();
+
+    for attr in &input.attrs {
+        if !attr.path().is_ident("lkh") {
+            continue;
+        }
+
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("separator") {
+                let lit: LitStr = meta.value()?.parse()?;
+                separator = lit.value();
+                return Ok(());
+            }
+
+            Err(meta.error("unsupported lkh attribute on enum; expected separator = \"...\""))
+        })?;
+    }
+
+    Ok(separator)
+}
+
+pub fn derive_lkh_display_inner(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     let enum_ident = input.ident.clone();
+    let separator = match parse_container_separator(&input) {
+        Ok(value) => value,
+        Err(err) => return err.to_compile_error().into(),
+    };
 
     let Data::Enum(data_enum) = input.data else {
         return syn::Error::new(input.span(), "AsLkh can only be derived for enums")
@@ -78,7 +104,7 @@ pub fn derive_as_lkh_inner(item: TokenStream) -> TokenStream {
             mappings.push((pat, value));
         }
         if mappings.is_empty() {
-            let capitalize = default_lkh_value(&variant_ident);
+            let capitalize = default_lkh_value(&variant_ident, &separator);
             mappings.push((None, LitStr::new(&capitalize, variant_ident.span())));
             //     return syn::Error::new(
             //         variant.span(),
@@ -124,11 +150,12 @@ pub fn derive_as_lkh_inner(item: TokenStream) -> TokenStream {
     }
 
     let expanded = quote! {
-        impl #enum_ident {
-            fn as_lkh(self) -> &'static str {
-                match self {
+        impl std::fmt::Display for #enum_ident {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                let val = match self {
                     #(#arms)*
-                }
+                };
+                write!(f, "{val}")
             }
         }
     };
@@ -143,22 +170,37 @@ mod tests {
 
     #[test]
     fn uppercases_single_word() {
-        assert_eq!(default_lkh_value(&format_ident!("Delaunay")), "DELAUNAY");
+        assert_eq!(
+            default_lkh_value(&format_ident!("Delaunay"), "-"),
+            "DELAUNAY"
+        );
     }
 
     #[test]
     fn splits_pascal_case_with_dash() {
-        assert_eq!(default_lkh_value(&format_ident!("KMeans")), "K-MEANS");
+        assert_eq!(default_lkh_value(&format_ident!("KMeans"), "-"), "K-MEANS");
         assert_eq!(
-            default_lkh_value(&format_ident!("NearestNeighbor")),
+            default_lkh_value(&format_ident!("NearestNeighbor"), "-"),
             "NEAREST-NEIGHBOR"
+        );
+    }
+
+    #[test]
+    fn supports_custom_separator() {
+        assert_eq!(
+            default_lkh_value(&format_ident!("UpperDiagRow"), "_"),
+            "UPPER_DIAG_ROW"
+        );
+        assert_eq!(
+            default_lkh_value(&format_ident!("NearestNeighbor"), " "),
+            "NEAREST NEIGHBOR"
         );
     }
 
     #[test]
     fn keeps_acronyms_intact() {
         assert_eq!(
-            default_lkh_value(&format_ident!("XMLHttpRequest")),
+            default_lkh_value(&format_ident!("XMLHttpRequest"), "-"),
             "XML-HTTP-REQUEST"
         );
     }

@@ -1,4 +1,3 @@
-mod as_lkh;
 mod cli_options;
 mod cli_value;
 mod kv_display;
@@ -31,9 +30,4 @@ pub fn derive_kv_display(item: TokenStream) -> TokenStream {
 #[proc_macro_derive(New)]
 pub fn derive_new(input: TokenStream) -> TokenStream {
     new::derive_new_inner(input)
-}
-
-#[proc_macro_derive(AsLkh, attributes(lkh))]
-pub fn derive_as_lkh(input: TokenStream) -> TokenStream {
-    as_lkh::derive_as_lkh_inner(input)
 }

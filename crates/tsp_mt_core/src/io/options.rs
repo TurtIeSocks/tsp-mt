@@ -118,7 +118,7 @@ impl SolverOptions {
     pub fn from_args() -> Result<Self> {
         let (mut options, saw_lkh_exe) = Self::parse_from_iter(env::args().skip(1))?;
         if !saw_lkh_exe {
-            options.lkh_exe = embedded_lkh::ensure_lkh_executable()?;
+            options.lkh_exe = embedded_lkh::embedded_path()?;
         }
         Ok(options)
     }

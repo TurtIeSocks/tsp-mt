@@ -2,7 +2,6 @@
 name = "tsp_mt_core"
 version = "0.1.0"
 edition = "2024"
-build = "build.rs"
 description = "Core solver library for tsp-mt"
 license = "Apache-2.0"
 readme = "../../README.md"
@@ -21,3 +20,4 @@ env_logger = "0.11.8"
 thiserror = "2.0.18"
 ctrlc = "3.4.7"
 tsp_mt_derive = { path = "../tsp_mt_derive" }
+lkh = { path = "../lkh", features = ["embedded-lkh"] }

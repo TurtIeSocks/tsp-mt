@@ -447,6 +447,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
+name = "lkh"
+version = "0.1.0"
+dependencies = [
+ "lkh_derive",
+ "thiserror",
+]
+
+[[package]]
+name = "lkh_derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -844,6 +861,7 @@ dependencies = [
  "env_logger",
  "h3o",
  "kiddo",
+ "lkh",
  "log",
  "map_3d",
  "rand",

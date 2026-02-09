@@ -1,16 +1,21 @@
 [workspace]
 resolver = "3"
-members  = ["crates/tsp_mt_core", "crates/tsp_mt_derive"]
+members = [
+  "crates/lkh",
+  "crates/lkh_derive",
+  "crates/tsp_mt_core",
+  "crates/tsp_mt_derive",
+]
 
 [package]
-name    = "tsp-mt"
-version = "0.1.0"
-edition = "2024"
+name        = "tsp-mt"
+version     = "0.1.0"
+edition     = "2024"
 description = "Multi-threaded TSP solver for lat/lng coordinates using LKH and H3 chunking"
-license = "Apache-2.0"
-readme = "README.md"
-keywords = ["tsp", "routing", "geo", "lkh", "h3"]
-categories = ["algorithms", "command-line-utilities"]
+license     = "Apache-2.0"
+readme      = "README.md"
+keywords    = ["tsp", "routing", "geo", "lkh", "h3"]
+categories  = ["algorithms", "command-line-utilities"]
 
 [dependencies]
 log           = "0.4.29"

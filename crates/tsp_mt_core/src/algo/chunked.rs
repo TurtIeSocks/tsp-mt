@@ -8,9 +8,10 @@ use std::{
 use rayon::prelude::*;
 
 use crate::{
-    Error, Result, SolverInput, Tour, config::LkhConfig, constants::MIN_CYCLE_POINTS, file_cleanup,
-    geometry, h3_chunking, node::LKHNode, options::SolverOptions, problem::TsplibProblemWriter,
-    process::LkhProcess, projection::PlaneProjection, solver::LkhSolver, stitching,
+    Error, Result, SolverInput, Tour, constants::MIN_CYCLE_POINTS, file_cleanup, geometry,
+    h3_chunking, node::LKHNode, options::SolverOptions, parameters::LkhParameters,
+    problem::TsplibProblemWriter, process::LkhProcess, projection::PlaneProjection,
+    solver::LkhSolver, stitching,
 };
 
 const RUN_INDEX_SINGLE: usize = 0;
@@ -28,6 +29,11 @@ const ERR_CENTROID_ORDERING_FAILED: &str = "Centroid ordering LKH failed";
 const ERR_INVALID_POINT: &str = "Input contains invalid lat/lng values";
 const ERR_INVALID_PROJECTION_RADIUS: &str = "projection_radius must be > 0";
 const ERR_INVALID_MAX_CHUNK_SIZE: &str = "max_chunk_size must be > 0";
+
+const SMALL_RUNS: usize = 1;
+const SMALL_TRACE_LEVEL: usize = 0;
+const DEFAULT_MAX_CANDIDATES: usize = 32;
+const DEFAULT_BASE_SEED: u64 = 12_345;
 
 fn file_name(stem: &str, extension: &str) -> String {
     format!("{stem}{extension}")
@@ -76,7 +82,7 @@ impl ChunkSolver {
         let cfg = solver.parallel_run_config(n);
         let run_par = solver.run_par_path(RUN_INDEX_SINGLE);
         let run_tour = solver.run_tour_path(RUN_INDEX_SINGLE);
-        let seed = cfg.base_seed();
+        let seed = cfg.seed.unwrap_or(DEFAULT_BASE_SEED);
         let run_cfg = cfg.with_seed(seed).with_output_tour_file(&run_tour);
 
         run_cfg.write_to_file(&run_par)?;
@@ -84,7 +90,7 @@ impl ChunkSolver {
         let out = solver.run(&run_par)?;
         LkhProcess::ensure_success(ERR_LKH_CHUNK_FAILED, &out)?;
 
-        LkhProcess::parse_tsplib_tour(&run_tour, n)
+        Ok(LkhProcess::parse_tsplib_tour(&run_tour, n)?)
     }
 
     fn order_by_centroid_tsp(
@@ -106,18 +112,27 @@ impl ChunkSolver {
         fs::create_dir_all(work_dir)?;
 
         let problem = work_dir.join(file_name(CENTROIDS_BASENAME, TSP_EXTENSION));
-        TsplibProblemWriter::write_euc2d(&problem, CENTROIDS_BASENAME, centroids)?;
+        TsplibProblemWriter::write_euc2d(
+            &problem,
+            CENTROIDS_BASENAME,
+            centroids.iter().map(|p| (p.x, p.y)),
+        )?;
 
         let par_path = work_dir.join(file_name(CENTROIDS_BASENAME, PAR_EXTENSION));
         let tour_path = work_dir.join(file_name(CENTROIDS_BASENAME, TOUR_EXTENSION));
 
-        let cfg = LkhConfig::for_small_problem(
-            &problem,
-            options.centroid_order_max_trials,
-            options.centroid_order_time_limit,
-        )
-        .with_seed(options.centroid_order_seed)
-        .with_output_tour_file(&tour_path);
+        let mut cfg = LkhParameters::new(&problem);
+        cfg.runs = Some(SMALL_RUNS);
+        cfg.max_trials = Some(options.centroid_order_max_trials);
+        cfg.trace_level = Some(SMALL_TRACE_LEVEL);
+        cfg.time_limit = Some(options.centroid_order_time_limit as f64);
+        cfg.max_candidates = Some(lkh::parameters::CandidateLimit::new(
+            DEFAULT_MAX_CANDIDATES,
+            true,
+        ));
+        let cfg = cfg
+            .with_seed(options.centroid_order_seed)
+            .with_output_tour_file(&tour_path);
 
         cfg.write_to_file(&par_path)?;
 
@@ -129,7 +144,7 @@ impl ChunkSolver {
         LkhProcess::ensure_success(ERR_CENTROID_ORDERING_FAILED, &out)?;
 
         log::debug!("chunked.order: done centroids={}", centroids.len());
-        LkhProcess::parse_tsplib_tour(&tour_path, centroids.len())
+        Ok(LkhProcess::parse_tsplib_tour(&tour_path, centroids.len())?)
     }
 }
 

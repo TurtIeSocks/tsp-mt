@@ -1,0 +1,17 @@
+[package]
+name = "lkh_derive"
+version = "0.1.0"
+edition = "2024"
+description = "Proc-macro derives for LKH configuration helpers"
+license = "Apache-2.0"
+readme = "../../README.md"
+keywords = ["proc-macro", "derive", "lkh"]
+categories = ["development-tools::procedural-macro-helpers"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }

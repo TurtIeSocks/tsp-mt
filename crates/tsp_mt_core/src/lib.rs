@@ -15,7 +15,7 @@ mod tour;
 pub(crate) use algo::{h3_chunking, stitching};
 pub(crate) use geo::{geometry, projection};
 pub(crate) use io::options;
-pub(crate) use lkh::{config, embedded_lkh, problem, process, solver};
+pub(crate) use lkh::{embedded_lkh, parameters, problem, process, solver};
 
 pub use algo::chunked::solve_tsp_with_lkh_h3_chunked;
 pub use error::{Error, Result};

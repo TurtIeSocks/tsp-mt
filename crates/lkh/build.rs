@@ -13,6 +13,11 @@ const LKH_WINDOWS_EXE: &str = "LKH.exe";
 const LKH_WINDOWS_URL: &str = "http://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe";
 
 fn main() -> Result<(), Box<dyn Error>> {
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_EMBEDDED_LKH");
+    if env::var_os("CARGO_FEATURE_EMBEDDED_LKH").is_none() {
+        return Ok(());
+    }
+
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     let workspace_root = manifest_dir
         .parent()
@@ -127,6 +132,11 @@ fn ensure_archive(workspace_root: &Path, archive_path: &Path) -> Result<(), Box<
         return Ok(());
     }
 
+    if let Some(cached) = find_cached_archive(workspace_root)? {
+        fs::copy(cached, archive_path)?;
+        return Ok(());
+    }
+
     let url = env::var("TSP_MT_LKH_URL").unwrap_or_else(|_| LKH_URL.to_string());
     if download_archive(&url, archive_path).is_ok() {
         return Ok(());
@@ -143,6 +153,33 @@ fn ensure_archive(workspace_root: &Path, archive_path: &Path) -> Result<(), Box<
         vendored.display()
     )
     .into())
+}
+
+fn find_cached_archive(workspace_root: &Path) -> io::Result<Option<PathBuf>> {
+    let target_dir = workspace_root.join("target");
+    if !target_dir.is_dir() {
+        return Ok(None);
+    }
+
+    let profiles = ["debug", "release"];
+    for profile in profiles {
+        let build_dir = target_dir.join(profile).join("build");
+        if !build_dir.is_dir() {
+            continue;
+        }
+        for entry in fs::read_dir(build_dir)? {
+            let candidate = entry?
+                .path()
+                .join("out")
+                .join("lkh-build")
+                .join(format!("LKH-{LKH_VERSION}.tgz"));
+            if candidate.is_file() {
+                return Ok(Some(candidate));
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 fn download_archive(url: &str, archive_path: &Path) -> io::Result<()> {

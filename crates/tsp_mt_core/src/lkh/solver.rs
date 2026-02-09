@@ -5,11 +5,12 @@ use std::{
     thread,
 };
 
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use rayon::prelude::*;
 
 use crate::{
-    Error, Result, SolverInput, Tour, config::LkhConfig, constants::MIN_CYCLE_POINTS, file_cleanup,
-    geometry, node::LKHNode, options::SolverOptions, problem::TsplibProblemWriter,
+    Error, Result, SolverInput, Tour, constants::MIN_CYCLE_POINTS, file_cleanup, geometry,
+    node::LKHNode, options::SolverOptions, parameters::LkhParameters, problem::TsplibProblemWriter,
     process::LkhProcess, projection::PlaneProjection,
 };
 
@@ -34,6 +35,24 @@ const ERR_MISSING_CANDIDATE_FILE: &str =
 const ERR_NO_RESULTS: &str = "No results";
 const ERR_INVALID_POINT: &str = "Input contains invalid lat/lng values";
 const ERR_INVALID_PROJECTION_RADIUS: &str = "projection_radius must be > 0";
+
+const PARALLEL_RUNS: usize = 1;
+const PARALLEL_TRACE_LEVEL: usize = 1;
+const DEFAULT_MAX_CANDIDATES: usize = 32;
+const DEFAULT_BASE_SEED: u64 = 12_345;
+const MAX_TRIALS_MULTIPLIER: usize = 3;
+const MIN_MAX_TRIALS: usize = 1_000;
+const MAX_MAX_TRIALS: usize = 100_000;
+const TIME_LIMIT_DIVISOR: usize = 512;
+const MIN_TIME_LIMIT_SECONDS: usize = 2;
+
+const PREPROCESS_RUNS: usize = 1;
+const PREPROCESS_TIME_LIMIT_SECONDS: usize = 1;
+
+fn generate_seeds(base_seed: u64, count: usize) -> Vec<u64> {
+    let mut rng = StdRng::seed_from_u64(base_seed);
+    (0..count).map(|_| rng.random::<u64>()).collect()
+}
 
 #[derive(Clone, Debug)]
 struct LkhWorkFiles {
@@ -132,16 +151,44 @@ impl LkhSolver {
     }
 
     pub(crate) fn create_problem_file(&self, points: &[LKHNode]) -> Result<()> {
-        TsplibProblemWriter::write_euc2d(&self.files.problem_tsp(), PROBLEM_BASENAME, points)
+        TsplibProblemWriter::write_euc2d(
+            &self.files.problem_tsp(),
+            PROBLEM_BASENAME,
+            points.iter().map(|p| (p.x, p.y)),
+        )?;
+        Ok(())
     }
 
-    pub(crate) fn parallel_run_config(&self, n: usize) -> LkhConfig {
-        LkhConfig::for_parallel_solve(
-            n,
-            self.files.problem_tsp(),
-            self.files.problem_candidate(),
-            self.files.problem_pi(),
-        )
+    pub(crate) fn parallel_run_config(&self, n: usize) -> LkhParameters {
+        let mut cfg = LkhParameters::new(self.files.problem_tsp());
+        cfg.runs = Some(PARALLEL_RUNS);
+        cfg.max_trials = Some((n * MAX_TRIALS_MULTIPLIER).clamp(MIN_MAX_TRIALS, MAX_MAX_TRIALS));
+        cfg.trace_level = Some(PARALLEL_TRACE_LEVEL);
+        cfg.time_limit = Some(((n / TIME_LIMIT_DIVISOR).max(MIN_TIME_LIMIT_SECONDS)) as f64);
+        cfg.max_candidates = Some(lkh::parameters::CandidateLimit::new(
+            DEFAULT_MAX_CANDIDATES,
+            true,
+        ));
+        cfg.seed = Some(DEFAULT_BASE_SEED);
+        cfg.candidate_files.push(self.files.problem_candidate());
+        cfg.pi_file = Some(self.files.problem_pi());
+        cfg
+    }
+
+    fn preprocessing_config(&self, n: usize) -> LkhParameters {
+        let mut cfg = LkhParameters::new(self.files.problem_tsp());
+        cfg.runs = Some(PREPROCESS_RUNS);
+        cfg.max_trials = Some(n);
+        cfg.trace_level = Some(PARALLEL_TRACE_LEVEL);
+        cfg.time_limit = Some(PREPROCESS_TIME_LIMIT_SECONDS as f64);
+        cfg.max_candidates = Some(lkh::parameters::CandidateLimit::new(
+            DEFAULT_MAX_CANDIDATES,
+            true,
+        ));
+        cfg.seed = Some(DEFAULT_BASE_SEED);
+        cfg.candidate_files.push(self.files.problem_candidate());
+        cfg.pi_file = Some(self.files.problem_pi());
+        cfg
     }
 
     pub(crate) fn ensure_candidate_file(&self, n: usize) -> Result<()> {
@@ -149,14 +196,10 @@ impl LkhSolver {
 
         let prep_par = self.files.prep_par();
         let prep_tour = self.files.prep_tour();
-        let prep_cfg = LkhConfig::for_preprocessing(
-            n,
-            self.files.problem_tsp(),
-            self.files.problem_candidate(),
-            self.files.problem_pi(),
-        )
-        .with_seed(PREP_SEED)
-        .with_output_tour_file(&prep_tour);
+        let prep_cfg = self
+            .preprocessing_config(n)
+            .with_seed(PREP_SEED)
+            .with_output_tour_file(&prep_tour);
 
         prep_cfg.write_to_file(&prep_par)?;
 
@@ -215,7 +258,7 @@ pub fn solve_tsp_with_lkh_parallel(input: SolverInput, options: SolverOptions) -
     log::info!(
         "solver: start n={} time_limit_s={:.0} threads={parallelism}",
         input.n(),
-        cfg.time_limit_seconds().unwrap_or(0.0)
+        cfg.time_limit.unwrap_or(0.0)
     );
 
     let pool = rayon::ThreadPoolBuilder::new()
@@ -224,7 +267,7 @@ pub fn solve_tsp_with_lkh_parallel(input: SolverInput, options: SolverOptions) -
         .map_err(|e| Error::other(format!("rayon pool: {e}")))?;
 
     let results: Vec<(Vec<usize>, f64)> = pool.install(|| {
-        cfg.generate_seeds(parallelism)
+        generate_seeds(cfg.seed.unwrap_or(DEFAULT_BASE_SEED), parallelism)
             .into_par_iter()
             .enumerate()
             .map(|(idx, seed)| -> Result<(Vec<usize>, f64)> {

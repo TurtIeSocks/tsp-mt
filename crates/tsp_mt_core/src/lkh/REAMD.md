@@ -3,13 +3,10 @@
 ## File Overview
 
 - `config.rs`
+  - Lives in the separate `lkh` crate.
   - Defines `LkhConfig`, the full LKH-3.0 parameter model.
   - Contains typed enums/structs for constrained parameter values.
   - Renders/writes `.par` files via `render()` and `write_to_file()`.
-  - Provides runtime presets:
-    - `for_parallel_solve(...)`
-    - `for_preprocessing(...)`
-    - `for_small_problem(...)`
 - `problem.rs`
   - Defines `TsplibProblemWriter`.
   - Writes projected points to TSPLIB EUC_2D format (`problem.tsp` style files).
@@ -35,11 +32,11 @@ Entry point: `solve_tsp_with_lkh_parallel(input, options)` in `solver.rs`.
 1. Project lat/lng points to local plane (`PlaneProjection`).
 1. Write TSPLIB problem file (`problem.tsp`) using `TsplibProblemWriter`.
 1. Ensure candidate/PI files exist:
-   - Build preprocessing config with `LkhConfig::for_preprocessing(...)`.
+   - Build preprocessing config in `solver.rs` from `LkhConfig::new(...)`.
    - Write `prep_candidates.par`.
    - Execute LKH once.
    - Verify `problem.cand` was produced.
-1. Build base run config with `LkhConfig::for_parallel_solve(...)`.
+1. Build base run config in `solver.rs` from `LkhConfig::new(...)`.
 1. Generate deterministic per-run seeds from config base seed.
 1. For each parallel run:
    - Clone config and set run-specific `SEED` + `OUTPUT_TOUR_FILE`.
@@ -58,7 +55,7 @@ Chunked solve lives in `src/algo/chunked.rs`, but uses this module directly:
   - Reuses `LkhSolver` + `parallel_run_config(...)`.
   - Executes a single run (`run_0.par`/`run_0.tour`) for local chunk ordering.
 - Centroid ordering:
-  - Builds standalone config with `LkhConfig::for_small_problem(...)`.
+  - Builds standalone config in `chunked.rs` from `LkhConfig::new(...)`.
   - Writes `centroids.par` + reads `centroids.tour`.
 
 So chunked and non-chunked modes share the same config rendering and tour parsing behavior.

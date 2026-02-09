@@ -1,11 +1,9 @@
-use thiserror::Error as ThisError;
+use thiserror::Error;
 
-#[derive(Debug, ThisError)]
-pub enum Error {
+#[derive(Debug, Error)]
+pub enum LkhError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error(transparent)]
-    Lkh(#[from] lkh::LkhError),
     #[error("invalid input: {0}")]
     InvalidInput(String),
     #[error("invalid data: {0}")]
@@ -20,9 +18,9 @@ pub enum Error {
     Other(String),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type LkhResult<T> = std::result::Result<T, LkhError>;
 
-impl Error {
+impl LkhError {
     pub fn invalid_input(message: impl Into<String>) -> Self {
         Self::InvalidInput(message.into())
     }
