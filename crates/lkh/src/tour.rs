@@ -25,13 +25,15 @@ pub enum TsplibTourType {
 }
 
 /// TSPLIB `.tour` file model.
-#[derive(Clone, Debug, Eq, PartialEq, WithMethods)]
+#[derive(Clone, Debug, PartialEq, WithMethods)]
 #[with(error = LkhError)]
 pub struct TsplibTour {
     pub name: Option<String>,
     pub comment_lines: Vec<String>,
     pub tour_type: Option<TsplibTourType>,
     pub dimension: Option<usize>,
+    /// Optional known optimum (`OPTIMUM`) when present in tour files.
+    pub optimum: Option<f64>,
     /// Node identifiers exactly as stored in TSPLIB (1-based).
     pub tour_section: Vec<usize>,
     pub emit_eof: bool,
@@ -46,6 +48,7 @@ impl TsplibTour {
             comment_lines: Vec::new(),
             tour_type: None,
             dimension: None,
+            optimum: None,
             tour_section: Vec::new(),
             emit_eof: true,
         }
@@ -125,6 +128,7 @@ impl TsplibTour {
 
                 if let Some((key, value)) = line
                     .split_once(':')
+                    .or_else(|| line.split_once('='))
                     .map(|(key, value)| (key.trim().to_ascii_uppercase(), value.trim()))
                 {
                     match key.as_str() {
@@ -150,6 +154,12 @@ impl TsplibTour {
                                 ))
                             })?;
                             tour.dimension = Some(parsed);
+                        }
+                        "OPTIMUM" => {
+                            let parsed = value.parse::<f64>().map_err(|e| {
+                                LkhError::invalid_data(format!("Bad OPTIMUM value '{value}': {e}"))
+                            })?;
+                            tour.optimum = Some(parsed);
                         }
                         _ => {}
                     }
@@ -219,6 +229,7 @@ impl Display for TsplibTour {
         }
 
         writer.opt_kv_colon("DIMENSION", self.dimension)?;
+        writer.opt_kv_colon("OPTIMUM", self.optimum)?;
 
         if !self.tour_section.is_empty() {
             writer.lines(TOUR_SECTION_HEADER, &self.tour_section)?;
@@ -303,6 +314,7 @@ mod tests {
     fn parse_reads_headers_from_lkh_tour_output() {
         let text = r#"
 NAME : problem.111984.tour
+OPTIMUM = 111984
 COMMENT : Length = 111984
 COMMENT : Found by LKH-3 [Keld Helsgaun] Sun Feb  8 16:58:45 2026
 TYPE : TOUR
@@ -322,6 +334,7 @@ EOF
         assert_eq!(tour.comment_lines.len(), 2);
         assert_eq!(tour.tour_type, Some(TsplibTourType::Tour));
         assert_eq!(tour.dimension, Some(4));
+        assert_eq!(tour.optimum, Some(111_984.0));
         assert_eq!(tour.tour_section, vec![1, 3, 2, 4]);
     }
 
@@ -332,6 +345,7 @@ EOF
         tour.comment_lines.push("Length = 42".to_string());
         tour.tour_type = Some(TsplibTourType::Tour);
         tour.dimension = Some(3);
+        tour.optimum = Some(42.0);
         tour.tour_section = vec![1, 2, 3];
 
         let text = tour.to_string();
@@ -340,6 +354,7 @@ EOF
         assert!(text.contains("TYPE: TOUR"));
         assert!(text.contains("COMMENT: Length = 42"));
         assert!(text.contains("DIMENSION: 3"));
+        assert!(text.contains("OPTIMUM: 42"));
         assert!(text.contains("TOUR_SECTION\n1\n2\n3\n-1\n"));
         assert!(text.ends_with("EOF\n"));
     }

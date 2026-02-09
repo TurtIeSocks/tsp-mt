@@ -83,6 +83,11 @@ fn rebase_parameter_paths(params: &mut LkhParameters, old_workdir: &Path, new_wo
         .iter()
         .map(|path| rebase_path(path, old_workdir, new_workdir))
         .collect();
+    params.edge_files = params
+        .edge_files
+        .iter()
+        .map(|path| rebase_path(path, old_workdir, new_workdir))
+        .collect();
     params.initial_tour_file = params
         .initial_tour_file
         .as_ref()
@@ -100,8 +105,16 @@ fn rebase_parameter_paths(params: &mut LkhParameters, old_workdir: &Path, new_wo
         .output_tour_file
         .as_ref()
         .map(|path| rebase_path(path, old_workdir, new_workdir));
+    params.mtsp_solution_file = params
+        .mtsp_solution_file
+        .as_ref()
+        .map(|path| rebase_path(path, old_workdir, new_workdir));
     params.pi_file = params
         .pi_file
+        .as_ref()
+        .map(|path| rebase_path(path, old_workdir, new_workdir));
+    params.sintef_solution_file = params
+        .sintef_solution_file
         .as_ref()
         .map(|path| rebase_path(path, old_workdir, new_workdir));
     params.subproblem_tour_file = params
@@ -153,11 +166,15 @@ mod tests {
         let mut params = LkhParameters::new("old/problem.tsp");
         params.candidate_files.push(PathBuf::from("cand1.txt"));
         params.candidate_files.push(PathBuf::from("old/cand2.txt"));
+        params.edge_files.push(PathBuf::from("edge1.txt"));
+        params.edge_files.push(PathBuf::from("old/edge2.txt"));
         params.initial_tour_file = Some(PathBuf::from("seed.tour"));
         params.input_tour_file = Some(PathBuf::from("old/input.tour"));
         params.merge_tour_files = vec![PathBuf::from("m1.tour"), PathBuf::from("old/m2.tour")];
         params.output_tour_file = Some(PathBuf::from("run.tour"));
+        params.mtsp_solution_file = Some(PathBuf::from("old/mtsp.sol"));
         params.pi_file = Some(PathBuf::from("old/problem.pi"));
+        params.sintef_solution_file = Some(PathBuf::from("sintef.sol"));
         params.subproblem_tour_file = Some(PathBuf::from("sub.tour"));
         params.tour_file = Some(PathBuf::from("old/final.tour"));
 
@@ -172,6 +189,13 @@ mod tests {
             vec![
                 PathBuf::from("new/cand1.txt"),
                 PathBuf::from("new/cand2.txt")
+            ]
+        );
+        assert_eq!(
+            solver.params.edge_files,
+            vec![
+                PathBuf::from("new/edge1.txt"),
+                PathBuf::from("new/edge2.txt")
             ]
         );
         assert_eq!(
@@ -190,7 +214,15 @@ mod tests {
             solver.params.output_tour_file,
             Some(PathBuf::from("new/run.tour"))
         );
+        assert_eq!(
+            solver.params.mtsp_solution_file,
+            Some(PathBuf::from("new/mtsp.sol"))
+        );
         assert_eq!(solver.params.pi_file, Some(PathBuf::from("new/problem.pi")));
+        assert_eq!(
+            solver.params.sintef_solution_file,
+            Some(PathBuf::from("new/sintef.sol"))
+        );
         assert_eq!(
             solver.params.subproblem_tour_file,
             Some(PathBuf::from("new/sub.tour"))

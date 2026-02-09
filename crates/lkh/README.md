@@ -13,8 +13,9 @@ workspace.
 ## File Format Specs
 
 - LKH parameter file spec: [`docs/PAR_SPEC.md`](docs/PAR_SPEC.md)
-  - Includes modeled keys, value shapes, upstream defaults, and abbreviation notes.
+  - Includes modeled LKH-3 keys, value shapes, upstream defaults, and abbreviation notes.
 - TSPLIB problem/tour spec: [`docs/TSPLIB_SPEC.md`](docs/TSPLIB_SPEC.md)
+  - Includes modeled LKH-3 TSPLIB extensions (`TYPE` variants, additional headers, and sections).
 
 ## Features
 
