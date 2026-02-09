@@ -5,14 +5,15 @@ use std::{
     time::Instant,
 };
 
-use lkh::tour::TsplibTour;
+use lkh::{
+    parameters::LkhParameters, problem::TsplibProblemWriter, process::LkhProcess, tour::TsplibTour,
+};
 use rayon::prelude::*;
 
 use crate::{
-    Error, Result, SolverInput, Tour, constants::MIN_CYCLE_POINTS, file_cleanup, geometry,
-    h3_chunking, node::LKHNode, options::SolverOptions, parameters::LkhParameters,
-    problem::TsplibProblemWriter, process::LkhProcess, projection::PlaneProjection,
-    solver::LkhSolver, stitching,
+    Error, Result, SolverInput, Tour, algo::solver::LkhSolver, constants::MIN_CYCLE_POINTS,
+    file_cleanup, geometry, h3_chunking, node::LKHNode, options::SolverOptions,
+    projection::PlaneProjection, stitching,
 };
 
 const RUN_INDEX_SINGLE: usize = 0;

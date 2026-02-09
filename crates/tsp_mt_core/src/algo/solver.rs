@@ -5,14 +5,15 @@ use std::{
     thread,
 };
 
-use lkh::tour::TsplibTour;
+use lkh::{
+    parameters::LkhParameters, problem::TsplibProblemWriter, process::LkhProcess, tour::TsplibTour,
+};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use rayon::prelude::*;
 
 use crate::{
     Error, Result, SolverInput, Tour, constants::MIN_CYCLE_POINTS, file_cleanup, geometry,
-    node::LKHNode, options::SolverOptions, parameters::LkhParameters, problem::TsplibProblemWriter,
-    process::LkhProcess, projection::PlaneProjection,
+    node::LKHNode, options::SolverOptions, projection::PlaneProjection,
 };
 
 const PREP_SEED: u64 = 1;

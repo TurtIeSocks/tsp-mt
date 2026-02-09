@@ -4,10 +4,11 @@ use std::{
     process,
 };
 
+use lkh::embedded_lkh;
 use log::LevelFilter;
 use tsp_mt_derive::{CliOptions, CliValue, KvDisplay};
 
-use crate::{Error, Result, embedded_lkh};
+use crate::{Error, Result};
 
 /// Runtime options for LKH solving behavior.
 #[derive(Clone, Debug, CliOptions, KvDisplay)]
