@@ -22,7 +22,7 @@ If you do **not** enable the `fetch-lkh` feature, you must provide an LKH execut
 
 - Windows:
   - Download `LKH.exe` from:
-    https://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe
+    http://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe
   - Provide it to the build either by:
     - setting `LKH_EXE_PATH` to the full path of `LKH.exe` (recommended), or
     - placing `LKH.exe` in the repository root (do **not** commit it)
@@ -234,7 +234,7 @@ comply with the LKH license terms**, and you are responsible for any
 use or redistribution.
 
 LKH license and homepage:
-https://webhotel4.ruc.dk/~keld/research/LKH-3/
+http://webhotel4.ruc.dk/~keld/research/LKH-3/
 
 To enable LKH support, you must enable the `fetch-lkh` cargo feature. By enabling the `fetch-lkh` feature, you acknowledge and agree to comply
 with the LKH license terms.
