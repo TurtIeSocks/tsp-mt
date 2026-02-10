@@ -13,16 +13,24 @@ High-performance TSP solver for geographic coordinates (`lat,lng`) utilizing par
 ## Prerequisites
 
 - Rust toolchain with 2024 edition support (Rust 1.90+ recommended)
-- Windows users:
+
+### Using an external LKH binary (default)
+
+If you do **not** enable the `fetch-lkh` feature, you must provide an LKH executable at runtime via `--lkh-exe <path>`.
+
+### Embedding LKH at build time (`fetch-lkh` feature)
+
+- Windows:
   - Download `LKH.exe` from:
     https://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe
-  - Either:
-    - set `LKH_EXE_PATH` to the full path of `LKH.exe` (recommended), or
-    - place `LKH.exe` in the repository root
-- Linux/macOS users: system tools:
-  - `make`
-  - `tar`
-  - `curl` or `wget` (for downloading LKH source during build)
+  - Provide it to the build either by:
+    - setting `LKH_EXE_PATH` to the full path of `LKH.exe` (recommended), or
+    - placing `LKH.exe` in the repository root (do **not** commit it)
+- Linux/macOS:
+  - system tools:
+    - `make`
+    - `tar`
+    - `curl` or `wget` (to download LKH source during build)
 
 ## Setup
 
@@ -33,19 +41,29 @@ git clone https://github.com/TurtIeSocks/tsp-mt.git
 cd tsp-mt
 ```
 
-2. Build release binary:
+2. Build the release binary.
+
+### Default build (external LKH at runtime)
 
 ```bash
-# Windows (recommended)
-$env:LKH_EXE_PATH="C:\path\to\LKH.exe"; cargo build --release
-# Windows (fallback)
 cargo build --release
+```
 
-# Unix - Must provide external LKH binary
-cargo build --release
-# Unix - Builds and includes the LKH binary, accepts LKH's licensing agreements. See below.
+At runtime, pass your LKH executable:
+
+```bash
+target/release/tsp-mt --lkh-exe /path/to/LKH [args] < points.txt
+```
+
+### Build with embedded LKH (`fetch-lkh`)
+
+```bash
+# Linux/macOS: downloads + builds LKH during `cargo build`
 cargo build --release --features fetch-lkh
 
+# Windows: you must provide LKH.exe yourself
+# PowerShell:
+$env:LKH_EXE_PATH="C:\path\to\LKH.exe"; cargo build --release --features fetch-lkh
 ```
 
 ### Use With [Koji](https://github.com/TurtIeSocks/Koji)
@@ -59,22 +77,27 @@ cp target/release/tsp-mt ~/{your_koji_directory}/server/algorithms/src/routing/p
 
 ### How LKH Is Provided
 
-During build, `build.rs` handles LKH differently depending on platform.
+During build, `build.rs` only runs when the `fetch-lkh` feature is enabled.
 
-#### Linux / macOS
+- Linux/macOS (`fetch-lkh`):
+  - Downloads the LKH source archive (default is a pinned GitHub source mirror URL)
+  - Verifies the archive SHA-256
+  - Builds `LKH` with `make`
+  - Embeds the resulting executable bytes into this binary
 
-When the `fetch-lkh` feature is enabled:
+- Windows (`fetch-lkh`):
+  - Uses `LKH_EXE_PATH` if set; otherwise falls back to `./LKH.exe` in the repository root
+  - (Optional) Verifies SHA-256 if you set `TSP_MT_LKH_WINDOWS_EXE_SHA256`
+  - Embeds the executable bytes into this binary
 
-1. Downloads `LKH-3.0.13.tgz` from the official site (default):
-   https://akira.ruc.dk/~keld/research/LKH-3/LKH-3.0.13.tgz
-2. Builds `LKH` locally using `make`
-3. Embeds the resulting executable bytes into this binary
+At runtime, the embedded LKH binary is extracted into your OS temp directory (unless you pass `--lkh-exe`).
 
-You may override the download URL:
+Overrides:
 
-```bash
-TSP_MT_LKH_URL='<url-to-LKH-3.0.13.tgz>' cargo build --release --features fetch-lkh
-```
+- `TSP_MT_LKH_URL`: override the source archive URL (Linux/macOS only)
+- `TSP_MT_LKH_SHA256`: override the expected SHA-256 for the archive
+- `LKH_EXE_PATH`: provide a path to `LKH.exe` on Windows
+- `TSP_MT_LKH_WINDOWS_EXE_SHA256`: verify the Windows `LKH.exe` by SHA-256
 
 ## Input Format
 
@@ -150,7 +173,7 @@ Both `--flag value` and `--flag=value` work.
 | ------------------------------------- | ------------------- | -----------------------: | ----------------------------------------------------------------------------- |
 | `--lkh-exe <path>`                    | path                |                   `auto` | Use this LKH executable instead of extracted embedded one                     |
 | `--work-dir <path>`                   | path                | `<os-temp>/tsp-mt-<pid>` | Temp/output workspace for run artifacts                                       |
-| `--input <path>`                      | path                |                  `stdin` | Read points from this file instead of stdin; requires UTF-8 `lat,lng` rows   |
+| `--input <path>`                      | path                |                  `stdin` | Read points from this file instead of stdin; requires UTF-8 `lat,lng` rows    |
 | `--output <path>`                     | path                |                 `stdout` | Write ordered route points to this file instead of stdout                     |
 | `--projection-radius <f64>`           | float               |                   `70.0` | Must be `> 0`                                                                 |
 | `--max-chunk-size <usize>`            | int                 |                   `5000` | Must be `> 0`; above this input size, H3 chunked solver is used               |
