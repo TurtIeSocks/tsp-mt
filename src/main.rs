@@ -55,7 +55,7 @@ fn main() -> Result<()> {
 #[tsp_mt_derive::timer("main")]
 fn main_inner(options: SolverOptions) -> Result<()> {
     let input = SolverInput::from_args(&options)?;
-    let output_path = options.output_path().map(PathBuf::from);
+    let output_path = options.output_path();
     let outlier_threshold = options.outlier_threshold;
     let _cleanup_guard = WorkDirCleanupGuard::new(&options.work_dir, options.cleanup);
 
