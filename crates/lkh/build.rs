@@ -10,14 +10,13 @@ use std::{
 use sha2::{Digest, Sha256};
 
 const LKH_VERSION: &str = "3.0.13";
-const LKH_URL: &str = "https://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.0.13.tgz";
-const LKH_HTTP_URL: &str = "http://akira.ruc.dk/~keld/research/LKH-3/LKH-3.0.13.tgz";
-const LKH_HTTP_FALLBACK_URL: &str = "http://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.0.13.tgz";
-const LKH_ARCHIVE_SHA256: &str = "c2bb3974bbeb016d2e45c56eae34bcb35617e28a6d8b1356de159256bc18ecbf";
+const LKH_URL: &str =
+    "https://codeload.github.com/blaulan/LKH-3/tar.gz/3da421394c922921b841c0be8e2d176b60fdcfe6";
+const LKH_ARCHIVE_SHA256: &str = "7f696cf6a38cf1bfdc2bb4b00dc386dcd3959a34b1afc3da8707030234c9560f";
 const LKH_ARCHIVE_SHA256_ENV: &str = "TSP_MT_LKH_SHA256";
 const LKH_ALLOW_INSECURE_HTTP_ENV: &str = "TSP_MT_ALLOW_INSECURE_HTTP_LKH";
 const LKH_WINDOWS_EXE: &str = "LKH.exe";
-const LKH_WINDOWS_URL: &str = "https://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe";
+const LKH_WINDOWS_URL: &str = "https://github.com/blaulan/LKH-3";
 const LKH_WINDOWS_SHA256_ENV: &str = "TSP_MT_LKH_WINDOWS_EXE_SHA256";
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -91,15 +90,18 @@ fn build_unix(workspace_root: &Path, out_dir: &Path) -> Result<(), Box<dyn Error
     if !built_exe.exists() {
         ensure_archive(workspace_root, &archive_path)?;
         if !src_dir.exists() {
+            fs::create_dir_all(&src_dir)?;
             run_cmd(
                 Command::new("tar")
                     .arg("-xzf")
                     .arg(&archive_path)
+                    .arg("--strip-components=1")
                     .arg("-C")
-                    .arg(&build_root),
+                    .arg(&src_dir),
                 "extracting LKH archive",
             )?;
         }
+        fs::create_dir_all(src_dir.join("SRC").join("OBJ"))?;
         run_cmd(
             Command::new("make").current_dir(&src_dir),
             "building LKH via make",
@@ -171,7 +173,7 @@ fn ensure_archive(workspace_root: &Path, archive_path: &Path) -> Result<(), Box<
             return Ok(());
         }
     } else {
-        for url in [LKH_URL, LKH_HTTP_URL, LKH_HTTP_FALLBACK_URL] {
+        for url in [LKH_URL] {
             if let Err(err) = try_download_and_verify_archive(url, archive_path) {
                 download_errors.push(format!("{url}: {err}"));
                 continue;
@@ -313,7 +315,7 @@ fn validate_download_url(url: &str) -> Result<(), Box<dyn Error>> {
     }
 
     if url.starts_with("http://") {
-        if allow_insecure_http() || is_known_default_http_lkh_url(url) {
+        if allow_insecure_http() {
             return Ok(());
         }
         return Err(format!(
@@ -324,10 +326,6 @@ fn validate_download_url(url: &str) -> Result<(), Box<dyn Error>> {
     }
 
     Err(format!("unsupported URL scheme for TSP_MT_LKH_URL: {url}").into())
-}
-
-fn is_known_default_http_lkh_url(url: &str) -> bool {
-    matches!(url, LKH_HTTP_URL | LKH_HTTP_FALLBACK_URL)
 }
 
 fn allow_insecure_http() -> bool {

@@ -1,6 +1,6 @@
 # `lkh` crate
 
-Typed Rust helpers for working with [LKH](http://akira.ruc.dk/~keld/research/LKH/):
+Typed Rust helpers for working with [LKH](https://github.com/blaulan/LKH-3):
 
 - TSPLIB problem modeling/writing
 - LKH parameter file modeling/writing
@@ -72,7 +72,6 @@ Override knobs:
 - `TSP_MT_LKH_URL` - custom archive URL.
 - `TSP_MT_LKH_SHA256` - expected SHA-256 for custom archive.
 - `TSP_MT_ALLOW_INSECURE_HTTP_LKH=1` - allow HTTP for custom URL.
-  - Not required for the built-in fallback HTTP mirrors.
 - `TSP_MT_LKH_WINDOWS_EXE_SHA256` - optional checksum pin for repository-root
   `LKH.exe` on Windows.
 
