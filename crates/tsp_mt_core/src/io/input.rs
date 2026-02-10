@@ -1,4 +1,8 @@
-use std::{fs, io::Read, path::Path};
+use std::{
+    fs,
+    io::Read,
+    path::{Path, PathBuf},
+};
 use tsp_mt_derive::KvDisplay;
 
 use crate::{Error, LKHNode, Result, SolverOptions};
@@ -19,7 +23,7 @@ impl SolverInput {
 
     pub fn from_args(options: &SolverOptions) -> Result<Self> {
         let nodes = match options.input_path() {
-            Some(path) => from_file(path)?,
+            Some(path) => from_file(&path)?,
             None => from_stdin()?,
         };
         Ok(Self { nodes })
@@ -44,7 +48,7 @@ fn from_stdin() -> Result<Vec<LKHNode>> {
     parse_points_from_tokens(&input)
 }
 
-fn from_file(path: &Path) -> Result<Vec<LKHNode>> {
+fn from_file(path: &PathBuf) -> Result<Vec<LKHNode>> {
     let bytes = fs::read(path)?;
     let input = std::str::from_utf8(&bytes).map_err(|_| {
         Error::invalid_input(format!(

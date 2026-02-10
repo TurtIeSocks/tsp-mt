@@ -1,6 +1,6 @@
 use std::{
     env,
-    fs::File,
+    fs::{self, File},
     io::{Write, stdout},
     path::{Path, PathBuf},
 };
@@ -80,7 +80,12 @@ fn write_route_output(
     output_path: Option<&std::path::Path>,
 ) -> Result<()> {
     let mut writer: Box<dyn Write> = match output_path {
-        Some(path) => Box::new(File::create(path)?),
+        Some(path) => {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            Box::new(File::create(path)?)
+        }
         None => Box::new(stdout()),
     };
 

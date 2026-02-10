@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write};
+use std::{fs::OpenOptions, io::Write};
 
 use env_logger::{Builder, Target, fmt::Formatter};
 use log::Level;
@@ -13,7 +13,7 @@ pub fn init_logger(options: &SolverOptions) -> Result<()> {
     let mut builder = Builder::new();
     builder
         .filter_level(options.log_level.to_filter())
-        .write_style(env_logger::WriteStyle::Never)
+        .write_style(env_logger::WriteStyle::Auto)
         .format(move |buf: &mut Formatter, record| {
             if log_timestamp {
                 write!(buf, "{} ", buf.timestamp_millis())?;
@@ -36,12 +36,19 @@ pub fn init_logger(options: &SolverOptions) -> Result<()> {
         });
 
     if let Some(log_path) = options.log_output_path() {
-        let log_file = File::create(log_path).map_err(|e| {
-            crate::Error::other(format!(
-                "failed to create log output file {}: {e}",
-                log_path.display()
-            ))
-        })?;
+        if let Some(parent) = log_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let log_file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&log_path)
+            .map_err(|e| {
+                crate::Error::other(format!(
+                    "failed to open log output file {} for append: {e}",
+                    log_path.display()
+                ))
+            })?;
         builder.target(Target::Pipe(Box::new(log_file)));
     } else {
         builder.target(Target::Stderr);

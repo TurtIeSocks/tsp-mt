@@ -248,8 +248,8 @@ impl SolverOptions {
                 }
             }
         }
-        options.work_dir = normalize_dir(options.work_dir)?;
-        options.lkh_exe = normalize_dir(options.lkh_exe)?;
+        options.work_dir = normalize_path(options.work_dir)?;
+        options.lkh_exe = normalize_path(options.lkh_exe)?;
 
         Ok((options, saw_lkh_exe))
     }
@@ -295,31 +295,16 @@ impl SolverOptions {
         )
     }
 
-    pub fn log_output_path(&self) -> Option<&Path> {
-        let log_output = self.log_output.trim();
-        if log_output.is_empty() || log_output == "-" {
-            None
-        } else {
-            Some(Path::new(log_output))
-        }
+    pub fn log_output_path(&self) -> Option<PathBuf> {
+        check_path(&self.log_output)
     }
 
-    pub fn output_path(&self) -> Option<&Path> {
-        let output = self.output.trim();
-        if output.is_empty() || output == "-" {
-            None
-        } else {
-            Some(Path::new(output))
-        }
+    pub fn output_path(&self) -> Option<PathBuf> {
+        check_path(&self.output)
     }
 
-    pub fn input_path(&self) -> Option<&Path> {
-        let input = self.input.trim();
-        if input.is_empty() || input == "-" {
-            None
-        } else {
-            Some(Path::new(input))
-        }
+    pub fn input_path(&self) -> Option<PathBuf> {
+        check_path(&self.input)
     }
 
     pub fn lkh_path(&self) -> &Path {
@@ -335,11 +320,21 @@ fn default_work_dir() -> PathBuf {
     env::temp_dir().join(format!("tsp-mt-{}", process::id()))
 }
 
-fn normalize_dir(dir: PathBuf) -> Result<PathBuf> {
-    if dir == PathBuf::new() {
-        return Ok(dir);
+fn check_path(path_str: &str) -> Option<PathBuf> {
+    let path_str = path_str.trim();
+    if path_str.is_empty() || path_str == "-" {
+        None
+    } else {
+        normalize_path(path_str).ok()
     }
-    std::path::absolute(dir).map_err(Into::into)
+}
+
+fn normalize_path(path: impl Into<PathBuf>) -> Result<PathBuf> {
+    let path = path.into();
+    if path == PathBuf::new() {
+        return Ok(path);
+    }
+    std::path::absolute(path).map_err(Error::Io)
 }
 
 fn parse_bool(name: &str, value: &str) -> Result<bool> {
@@ -354,6 +349,12 @@ fn parse_bool(name: &str, value: &str) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        path::PathBuf,
+        process,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
     use log::LevelFilter;
 
     use super::{LogFormat, LogLevel, SolverMode, SolverOptions, parse_bool};
@@ -559,10 +560,8 @@ mod tests {
             input: "in/points.txt".to_string(),
             ..SolverOptions::default()
         };
-        assert_eq!(
-            options.input_path().expect("path should exist"),
-            std::path::Path::new("in/points.txt")
-        );
+        let expected = std::path::absolute("in/points.txt").expect("absolute path");
+        assert_eq!(options.input_path().expect("path should exist"), expected);
     }
 
     #[test]
@@ -571,10 +570,8 @@ mod tests {
             output: "out/route.txt".to_string(),
             ..SolverOptions::default()
         };
-        assert_eq!(
-            options.output_path().expect("path should exist"),
-            std::path::Path::new("out/route.txt")
-        );
+        let expected = std::path::absolute("out/route.txt").expect("absolute path");
+        assert_eq!(options.output_path().expect("path should exist"), expected);
     }
 
     #[test]
@@ -595,9 +592,41 @@ mod tests {
             log_output: "out/run.log".to_string(),
             ..SolverOptions::default()
         };
+        let expected = std::path::absolute("out/run.log").expect("absolute path");
         assert_eq!(
             options.log_output_path().expect("path should exist"),
-            std::path::Path::new("out/run.log")
+            expected
+        );
+    }
+
+    #[test]
+    fn output_path_without_extension_has_no_side_effects() {
+        let unique = format!(
+            "tsp-mt-options-{}-{}",
+            process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock drift")
+                .as_nanos()
+        );
+        let nested = std::env::temp_dir().join(unique).join("logs").join("run");
+        let output = nested.to_string_lossy().into_owned();
+        let options = SolverOptions {
+            output,
+            ..SolverOptions::default()
+        };
+
+        let normalized = options.output_path().expect("path should exist");
+        let expected = std::path::absolute(PathBuf::from(&nested)).expect("absolute path");
+        assert_eq!(normalized, expected);
+        assert!(
+            !normalized.exists(),
+            "normalization should not create a file"
+        );
+        let parent = normalized.parent().expect("parent path");
+        assert!(
+            !parent.exists(),
+            "normalization should not create parent directories"
         );
     }
 }
