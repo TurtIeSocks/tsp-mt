@@ -6,6 +6,7 @@ target/
 /*.txt
 /*.exe
 /*.tgz
+.DS_Store
 
 # Dev
 /old

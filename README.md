@@ -5,6 +5,7 @@ High-performance TSP solver for geographic coordinates (`lat,lng`) utilizing par
 ## What It Does
 
 - Reads points from `stdin`
+- Or reads points from `--input <path>`
 - Solves a route order
 - Writes ordered points to `stdout` (one `lat,lng` per line) or `--output <path>`
 - Writes logs/metrics to `stderr` (default) or `--log-output <path>`
@@ -75,10 +76,12 @@ You may override the download URL:
 TSP_MT_LKH_URL='<url-to-LKH-3.0.13.tgz>' cargo build --release --features fetch-lkh
 ```
 
-## Input Format (`stdin`)
+## Input Format
+
+### `stdin` (default)
 
 - Whitespace-separated tokens, each exactly: `lat,lng`
-- Newlines and spaces are both fine separators and can be mixed
+- Newlines and spaces are both valid separators and can be mixed
 - Latitude must be in `[-90, 90]`
 - Longitude must be in `[-180, 180]`
 - Provide at least 3 points for normal TSP cycle solving
@@ -89,6 +92,15 @@ Example valid input:
 37.7749,-122.4194
 34.0522,-118.2437 36.1699,-115.1398
 ```
+
+### `--input <path>` (file mode)
+
+- File must be UTF-8 raw text
+- Exactly one `lat,lng` row per line
+- Blank lines are rejected
+- Space-separated tokens on the same line are rejected in file mode
+- Latitude must be in `[-90, 90]`
+- Longitude must be in `[-180, 180]`
 
 ## Output Format
 
@@ -109,6 +121,12 @@ Cleaner output, no Cargo compile logs.
 
 ```bash
 target/release/tsp-mt [args] < points.txt > output.txt
+```
+
+Read points from a file directly (no stdin redirect):
+
+```bash
+target/release/tsp-mt [args] --input points.txt --output output.txt
 ```
 
 To save output to a file rather than capturing it via `stdout`.
@@ -132,6 +150,7 @@ Both `--flag value` and `--flag=value` work.
 | ------------------------------------- | ------------------- | -----------------------: | ----------------------------------------------------------------------------- |
 | `--lkh-exe <path>`                    | path                |                   `auto` | Use this LKH executable instead of extracted embedded one                     |
 | `--work-dir <path>`                   | path                | `<os-temp>/tsp-mt-<pid>` | Temp/output workspace for run artifacts                                       |
+| `--input <path>`                      | path                |                  `stdin` | Read points from this file instead of stdin; requires UTF-8 `lat,lng` rows   |
 | `--output <path>`                     | path                |                 `stdout` | Write ordered route points to this file instead of stdout                     |
 | `--projection-radius <f64>`           | float               |                   `70.0` | Must be `> 0`                                                                 |
 | `--max-chunk-size <usize>`            | int                 |                   `5000` | Must be `> 0`; above this input size, H3 chunked solver is used               |
@@ -161,6 +180,12 @@ Accepted boolean values for `--log-timestamp=<bool>` and `--cleanup=<bool>`:
 
 - `No points provided on stdin.`  
   You did not pipe or redirect any input.
+
+- `Input file must be UTF-8 raw text: ...`  
+  The `--input` file is not valid UTF-8 text.
+
+- `Input file ... line N: expected exactly one 'lat,lng' row`  
+  The `--input` file has invalid row formatting (for example multiple tokens on one line).
 
 - `Need at least 3 points for a cycle`  
   Add at least 3 points.

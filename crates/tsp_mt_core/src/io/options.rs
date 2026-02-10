@@ -71,6 +71,9 @@ pub struct SolverOptions {
     /// Optional output file path for logs and metrics. Empty means stderr.
     #[cli(long = "log-output")]
     pub log_output: String,
+    /// Optional input file path for points. Empty means stdin.
+    #[cli(long = "input")]
+    pub input: String,
     /// Optional output file path for ordered route points. Empty means stdout.
     #[cli(long = "output")]
     pub output: String,
@@ -138,6 +141,7 @@ impl Default for SolverOptions {
             log_format: LogFormat::Compact,
             log_timestamp: true,
             log_output: String::new(),
+            input: String::new(),
             output: String::new(),
         }
     }
@@ -245,6 +249,7 @@ impl SolverOptions {
     pub fn usage() -> &'static str {
         concat!(
             "Usage:\n",
+            "  tsp-mt [options] [--input points.txt]\n",
             "  tsp-mt [options] < points.txt\n\n",
             "Options:\n",
             "  --lkh-exe <path>\n",
@@ -268,11 +273,13 @@ impl SolverOptions {
             "  --cleanup[=<bool>]\n",
             "  --no-cleanup\n",
             "  --log-output <path>\n",
+            "  --input <path>\n",
             "  --output <path>\n",
             "  --help\n",
             "\n",
             "Examples:\n",
             "  tsp-mt --max-chunk-size 2000 --log-level warn --output output.txt < points.txt\n",
+            "  tsp-mt --input points.txt --output output.txt\n",
             "  tsp-mt --log-level=info --log-output run.log < points.txt\n",
             "  tsp-mt --log-level=debug --log-format=pretty --log-timestamp < points.txt\n",
             "  tsp-mt --solver-mode=multi-seed --log-level=info < points.txt\n",
@@ -295,6 +302,15 @@ impl SolverOptions {
             None
         } else {
             Some(Path::new(output))
+        }
+    }
+
+    pub fn input_path(&self) -> Option<&Path> {
+        let input = self.input.trim();
+        if input.is_empty() || input == "-" {
+            None
+        } else {
+            Some(Path::new(input))
         }
     }
 
@@ -382,6 +398,7 @@ mod tests {
             "--log-timestamp=false",
             "--cleanup=false",
             "--log-output=run.log",
+            "--input=points.txt",
             "--output=route.txt",
         ])
         .expect("parse options");
@@ -403,6 +420,7 @@ mod tests {
         assert!(!options.log_timestamp);
         assert!(!options.cleanup);
         assert_eq!(options.log_output, "run.log");
+        assert_eq!(options.input, "points.txt");
         assert_eq!(options.output, "route.txt");
     }
 
@@ -494,6 +512,30 @@ mod tests {
             ..SolverOptions::default()
         };
         assert!(options.output_path().is_none());
+    }
+
+    #[test]
+    fn input_path_treats_empty_and_dash_as_stdin() {
+        let options = SolverOptions::default();
+        assert!(options.input_path().is_none());
+
+        let options = SolverOptions {
+            input: "-".to_string(),
+            ..SolverOptions::default()
+        };
+        assert!(options.input_path().is_none());
+    }
+
+    #[test]
+    fn input_path_returns_path_for_non_empty_value() {
+        let options = SolverOptions {
+            input: "in/points.txt".to_string(),
+            ..SolverOptions::default()
+        };
+        assert_eq!(
+            options.input_path().expect("path should exist"),
+            std::path::Path::new("in/points.txt")
+        );
     }
 
     #[test]
