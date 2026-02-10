@@ -248,6 +248,8 @@ impl SolverOptions {
                 }
             }
         }
+        options.work_dir = normalize_dir(options.work_dir)?;
+        options.lkh_exe = normalize_dir(options.lkh_exe)?;
 
         Ok((options, saw_lkh_exe))
     }
@@ -331,6 +333,13 @@ impl SolverOptions {
 
 fn default_work_dir() -> PathBuf {
     env::temp_dir().join(format!("tsp-mt-{}", process::id()))
+}
+
+fn normalize_dir(dir: PathBuf) -> Result<PathBuf> {
+    if dir == PathBuf::new() {
+        return Ok(dir);
+    }
+    std::path::absolute(dir).map_err(Into::into)
 }
 
 fn parse_bool(name: &str, value: &str) -> Result<bool> {
@@ -480,6 +489,18 @@ mod tests {
         assert!(saw_lkh);
         assert_eq!(options.lkh_path(), std::path::Path::new("/bin/lkh"));
         assert_eq!(options.work_dir_path(), std::path::Path::new("/tmp/work"));
+    }
+
+    #[test]
+    fn parse_from_iter_normalizes_relative_work_dir_to_absolute_path() {
+        let relative = std::path::PathBuf::from("tmp").join("..").join("work");
+        let expected = std::path::absolute(&relative).expect("absolute path");
+
+        let (options, _) =
+            SolverOptions::parse_from_iter([format!("--work-dir={}", relative.display())])
+                .expect("options should be parsed");
+
+        assert_eq!(options.work_dir_path(), expected);
     }
 
     #[test]
