@@ -96,3 +96,53 @@ impl<'a, 'b> SpecWriter<'a, 'b> {
         self.line("")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::SpecWriter;
+
+    #[test]
+    fn writer_emits_expected_lines_for_key_value_helpers() {
+        struct Render;
+        impl std::fmt::Display for Render {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                let mut w = SpecWriter::new(f);
+                w.line("HEAD")?;
+                w.lines("VALUES", &[1, 2])?;
+                w.lines::<i32>("EMPTY", &[])?;
+                w.kv_eq("A", 10)?;
+                w.opt_kv_eq("B", None::<u8>)?;
+                w.opt_kv_eq("B", Some(11))?;
+                w.kv_colon("C", 12)?;
+                w.opt_kv_colon("D", None::<u8>)?;
+                w.opt_kv_colon("D", Some(13))?;
+                w.opt_path_eq("P", Some(&PathBuf::from("problem.par")))?;
+                w.path_list_eq("CANDIDATE_FILE", &[PathBuf::from("a"), PathBuf::from("b")])?;
+                Ok(())
+            }
+        }
+
+        let out = format!("{}", Render);
+        assert_eq!(
+            out,
+            "HEAD\nVALUES\n1\n2\nA = 10\nB = 11\nC: 12\nD: 13\nP = problem.par\nCANDIDATE_FILE = a\nCANDIDATE_FILE = b\n"
+        );
+    }
+
+    #[test]
+    fn row_skips_empty_and_formats_space_separated_values() {
+        struct Render;
+        impl std::fmt::Display for Render {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                let mut w = SpecWriter::new(f);
+                w.row::<i32>(&[])?;
+                w.row(&[7, 8, 9])?;
+                Ok(())
+            }
+        }
+
+        assert_eq!(format!("{}", Render), "7 8 9\n");
+    }
+}

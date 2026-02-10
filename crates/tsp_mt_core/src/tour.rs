@@ -51,3 +51,48 @@ pub struct TourMetrics {
     pub average: f64,
     pub threshold: f64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Tour, TourMetrics};
+    use crate::LKHNode;
+
+    #[test]
+    fn tour_metrics_returns_default_for_short_tours() {
+        let empty = Tour::new(Vec::new());
+        let single = Tour::new(vec![LKHNode::from_lat_lng(0.0, 0.0)]);
+
+        assert_eq!(empty.tour_metrics(2.0).total, TourMetrics::default().total);
+        assert_eq!(
+            single.tour_metrics(2.0).outliers,
+            TourMetrics::default().outliers
+        );
+        assert_eq!(
+            single.tour_metrics(2.0).longest,
+            TourMetrics::default().longest
+        );
+    }
+
+    #[test]
+    fn tour_metrics_computes_cycle_lengths_and_outliers() {
+        let tour = Tour::new(vec![
+            LKHNode::from_lat_lng(0.0, 0.0),
+            LKHNode::from_lat_lng(0.0, 1.0),
+            LKHNode::from_lat_lng(0.0, 2.0),
+        ]);
+
+        let metrics = tour.tour_metrics(1.2);
+        let d01 = tour.nodes[0].dist(&tour.nodes[1]);
+        let d12 = tour.nodes[1].dist(&tour.nodes[2]);
+        let d20 = tour.nodes[2].dist(&tour.nodes[0]);
+        let expected_total = d01 + d12 + d20;
+        let expected_average = expected_total / 3.0;
+        let expected_threshold = expected_average * 1.2;
+
+        assert!((metrics.total - expected_total).abs() < 1e-6);
+        assert!((metrics.average - expected_average).abs() < 1e-6);
+        assert!((metrics.threshold - expected_threshold).abs() < 1e-6);
+        assert!((metrics.longest - d20).abs() < 1e-6);
+        assert_eq!(metrics.outliers, 1);
+    }
+}
