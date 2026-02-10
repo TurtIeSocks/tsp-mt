@@ -11,7 +11,7 @@ High-performance TSP solver for geographic coordinates (`lat,lng`) using LKH, pa
 
 ## Prerequisites
 
-- Rust toolchain with 2024 edition support (Rust 1.85+ recommended)
+- Rust toolchain with 2024 edition support (Rust 1.90+ recommended)
 - Windows users: download `LKH.exe` from `https://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe` and place it in the repository root (`./LKH.exe`) before building.
 - Linux/macOS users: system tools:
   - `make`
