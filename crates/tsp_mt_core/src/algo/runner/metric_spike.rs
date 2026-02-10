@@ -173,12 +173,11 @@ fn try_global_metric_spike_two_opt(
             distance_gain
                 + (spike_gain * METRIC_SPIKE_REPAIR_SPIKE_BONUS_M)
                 + (overflow_gain * METRIC_SPIKE_REPAIR_OVERFLOW_WEIGHT)
-        } else if distance_gain > METRIC_SPIKE_REPAIR_IMPROVEMENT_EPSILON {
-            distance_gain + (overflow_gain * METRIC_SPIKE_REPAIR_OVERFLOW_WEIGHT)
-        } else if overflow_gain >= METRIC_SPIKE_REPAIR_MIN_OVERFLOW_GAIN_M
-            && distance_gain >= -METRIC_SPIKE_REPAIR_MAX_DISTANCE_DEGRADATION_M
+        } else if distance_gain > METRIC_SPIKE_REPAIR_IMPROVEMENT_EPSILON
+            || (overflow_gain >= METRIC_SPIKE_REPAIR_MIN_OVERFLOW_GAIN_M
+                && distance_gain >= -METRIC_SPIKE_REPAIR_MAX_DISTANCE_DEGRADATION_M)
         {
-            (overflow_gain * METRIC_SPIKE_REPAIR_OVERFLOW_WEIGHT) + distance_gain
+            distance_gain + (overflow_gain * METRIC_SPIKE_REPAIR_OVERFLOW_WEIGHT)
         } else {
             f64::NEG_INFINITY
         };
@@ -307,12 +306,11 @@ fn try_metric_spike_node_relocation(
                 distance_gain
                     + (spike_gain * METRIC_SPIKE_REPAIR_SPIKE_BONUS_M)
                     + (overflow_gain * METRIC_SPIKE_REPAIR_OVERFLOW_WEIGHT)
-            } else if distance_gain > METRIC_SPIKE_REPAIR_IMPROVEMENT_EPSILON {
-                distance_gain + (overflow_gain * METRIC_SPIKE_REPAIR_OVERFLOW_WEIGHT)
-            } else if overflow_gain >= METRIC_SPIKE_REPAIR_MIN_OVERFLOW_GAIN_M
-                && distance_gain >= -METRIC_SPIKE_REPAIR_MAX_DISTANCE_DEGRADATION_M
+            } else if distance_gain > METRIC_SPIKE_REPAIR_IMPROVEMENT_EPSILON
+                || (overflow_gain >= METRIC_SPIKE_REPAIR_MIN_OVERFLOW_GAIN_M
+                    && distance_gain >= -METRIC_SPIKE_REPAIR_MAX_DISTANCE_DEGRADATION_M)
             {
-                (overflow_gain * METRIC_SPIKE_REPAIR_OVERFLOW_WEIGHT) + distance_gain
+                distance_gain + (overflow_gain * METRIC_SPIKE_REPAIR_OVERFLOW_WEIGHT)
             } else {
                 f64::NEG_INFINITY
             };
