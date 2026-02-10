@@ -1,6 +1,6 @@
 # Multi Threaded Traveling Salesperson
 
-High-performance TSP solver for geographic coordinates (`lat,lng`) using LKH, parallel runs, and H3 chunking for large inputs.
+High-performance TSP solver for geographic coordinates (`lat,lng`) utilizing parallel runs, and H3 chunking for large inputs.
 
 ## What It Does
 
@@ -12,7 +12,12 @@ High-performance TSP solver for geographic coordinates (`lat,lng`) using LKH, pa
 ## Prerequisites
 
 - Rust toolchain with 2024 edition support (Rust 1.90+ recommended)
-- Windows users: download `LKH.exe` from `https://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe` and place it in the repository root (`./LKH.exe`) before building.
+- Windows users:
+  - Download `LKH.exe` from:
+    https://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe
+  - Either:
+    - set `LKH_EXE_PATH` to the full path of `LKH.exe` (recommended), or
+    - place `LKH.exe` in the repository root
 - Linux/macOS users: system tools:
   - `make`
   - `tar`
@@ -30,7 +35,16 @@ cd tsp-mt
 2. Build release binary:
 
 ```bash
+# Windows (recommended)
+$env:LKH_EXE_PATH="C:\path\to\LKH.exe"; cargo build --release
+# Windows (fallback)
 cargo build --release
+
+# Unix - Must provide external LKH binary
+cargo build --release
+# Unix - Builds and includes the LKH binary, accepts LKH's licensing agreements. See below.
+cargo build --release --features fetch-lkh
+
 ```
 
 ### Use With [Koji](https://github.com/TurtIeSocks/Koji)
@@ -38,31 +52,28 @@ cargo build --release
 Build, then copy the final binary to Koji's routing plugins folder:
 
 ```bash
-cargo build --release
+# build with script above ^
 cp target/release/tsp-mt ~/{your_koji_directory}/server/algorithms/src/routing/plugins/
 ```
 
 ### How LKH Is Provided
 
-During build, `build.rs`:
+During build, `build.rs` handles LKH differently depending on platform.
 
-1. On Linux/macOS:
-   - Downloads `LKH-3.0.13.tgz` (default URL: `https://akira.ruc.dk/~keld/research/LKH-3/LKH-3.0.13.tgz`)
-   - Builds `LKH` with `make`
-   - Embeds the resulting executable bytes into this binary
-2. On Windows:
-   - Reads `./LKH.exe` from the repository root
-   - Embeds it into this binary
+#### Linux / macOS
 
-Runtime then extracts the embedded LKH binary into your OS temp directory (unless you pass `--lkh-exe`).
+When the `fetch-lkh` feature is enabled:
 
-You can override the download URL:
+1. Downloads `LKH-3.0.13.tgz` from the official site (default):
+   https://akira.ruc.dk/~keld/research/LKH-3/LKH-3.0.13.tgz
+2. Builds `LKH` locally using `make`
+3. Embeds the resulting executable bytes into this binary
+
+You may override the download URL:
 
 ```bash
-TSP_MT_LKH_URL='<your-url-to-LKH-3.0.13.tgz>' cargo build --release
+TSP_MT_LKH_URL='<url-to-LKH-3.0.13.tgz>' cargo build --release --features fetch-lkh
 ```
-
-If download fails, build also looks for a vendored archive at `lkh/lkh.tgz`.
 
 ## Input Format (`stdin`)
 
@@ -86,30 +97,30 @@ Example valid input:
 - `stderr`: progress, timing, and distance metrics (default)
 - `--log-output <path>`: logs/metrics written to the specified file instead of stderr
 
-## Run
+## Run Examples
 
-Use either:
-
-```bash
-cargo run --release -- [args] < points.txt
-```
-
-or (cleaner output, no Cargo compile logs):
+Basic usage. Reads points via stdin and saves them via stdout.
 
 ```bash
-target/release/tsp-mt [args] < points.txt
+cargo run --release -- [args] < points.txt > output.txt
 ```
 
-or to save output to file:
+Cleaner output, no Cargo compile logs.
+
+```bash
+target/release/tsp-mt [args] < points.txt > output.txt
+```
+
+To save output to a file rather than capturing it via `stdout`.
 
 ```bash
 target/release/tsp-mt [args] --output output.txt < points.txt
 ```
 
-or to save logs to file:
+To save logs to file:
 
 ```bash
-target/release/tsp-mt [args] --log-output run.log < points.txt
+target/release/tsp-mt [args] --output output.txt --log-output run.log < points.txt
 ```
 
 ## CLI Arguments
@@ -158,4 +169,28 @@ Accepted boolean values for `--log-timestamp=<bool>` and `--cleanup=<bool>`:
   At least one point is out of bounds or non-finite.
 
 - Build error downloading LKH archive  
-  Ensure `curl`/`wget` and network access, set `TSP_MT_LKH_URL`, or place `lkh/lkh.tgz`.
+  Ensure `curl`/`wget` and network access, set `TSP_MT_LKH_URL`.
+
+## LKH dependency notice
+
+This project can optionally use the LKH-3 solver by Keld Helsgaun.
+
+LKH is **not open source software** and is distributed under a
+research-only license by its author. It is **not included** in this
+repository.
+
+If you enable LKH support, the build process will download LKH source
+code from a public source mirror and compile it locally on your
+machine. By enabling this functionality, **you explicitly agree to
+comply with the LKH license terms**, and you are responsible for any
+use or redistribution.
+
+LKH license and homepage:
+https://webhotel4.ruc.dk/~keld/research/LKH-3/
+
+To enable LKH support, you must enable the `fetch-lkh` cargo feature. By enabling the `fetch-lkh` feature, you acknowledge and agree to comply
+with the LKH license terms.
+
+```bash
+cargo build --release --features fetch-lkh
+```

@@ -27,7 +27,7 @@
 //!     let params = LkhParameters::new("work/problem.tsp");
 //!     let solver = LkhSolver::new(problem, params)?;
 //!
-//!     // Use an explicit binary path when not relying on embedded-lkh.
+//!     // Use an explicit binary path when not relying on fetch-lkh.
 //!     let tour = solver.run_with_exe("/usr/local/bin/LKH")?;
 //!     let order = tour.zero_based_tour()?;
 //!     println!("{order:?}");
@@ -76,8 +76,8 @@ impl LkhSolver {
         Ok(solver)
     }
 
-    #[cfg(feature = "embedded-lkh")]
-    /// Runs LKH using the embedded executable (`embedded-lkh` feature).
+    #[cfg(feature = "fetch-lkh")]
+    /// Runs LKH using the embedded executable (`fetch-lkh` feature).
     pub fn run(&self) -> LkhResult<TsplibTour> {
         self._run(LkhProcess::try_default()?)
     }

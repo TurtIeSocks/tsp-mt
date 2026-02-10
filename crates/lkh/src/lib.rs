@@ -41,7 +41,7 @@ pub mod process;
 pub mod solver;
 pub mod tour;
 
-#[cfg(feature = "embedded-lkh")]
+#[cfg(feature = "fetch-lkh")]
 pub mod embedded_lkh;
 
 mod error;

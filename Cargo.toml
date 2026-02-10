@@ -22,6 +22,10 @@ log           = "0.4.29"
 tsp_mt_core   = { path = "crates/tsp_mt_core" }
 tsp_mt_derive = { path = "crates/tsp_mt_derive" }
 
+[features]
+default   = []
+fetch-lkh = ["tsp_mt_core/fetch-lkh"]
+
 [profile.dev.package."*"]
 opt-level = 3
 

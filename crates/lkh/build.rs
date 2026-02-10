@@ -17,11 +17,13 @@ const LKH_ARCHIVE_SHA256_ENV: &str = "TSP_MT_LKH_SHA256";
 const LKH_ALLOW_INSECURE_HTTP_ENV: &str = "TSP_MT_ALLOW_INSECURE_HTTP_LKH";
 const LKH_WINDOWS_EXE: &str = "LKH.exe";
 const LKH_WINDOWS_URL: &str = "https://github.com/blaulan/LKH-3";
+const LKH_WINDOWS_EXE_PATH_ENV: &str = "LKH_EXE_PATH";
+const LKH_FEATURE_ENV: &str = "CARGO_FEATURE_FETCH_LKH";
 const LKH_WINDOWS_SHA256_ENV: &str = "TSP_MT_LKH_WINDOWS_EXE_SHA256";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_EMBEDDED_LKH");
-    if env::var_os("CARGO_FEATURE_EMBEDDED_LKH").is_none() {
+    println!("cargo:rerun-if-env-changed={LKH_FEATURE_ENV}");
+    if env::var_os(LKH_FEATURE_ENV).is_none() {
         return Ok(());
     }
 
@@ -38,10 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-env-changed={LKH_WINDOWS_SHA256_ENV}");
 
     if cfg!(target_os = "windows") {
-        let root_exe = workspace_root.join(LKH_WINDOWS_EXE);
-        if root_exe.exists() {
-            println!("cargo:rerun-if-changed={}", root_exe.display());
-        }
+        println!("cargo:rerun-if-env-changed={LKH_WINDOWS_EXE_PATH_ENV}");
         return build_windows(workspace_root, &out_dir);
     }
 
@@ -50,31 +49,36 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     println!("cargo:rerun-if-env-changed=TSP_MT_LKH_URL");
-    let vendored_archive = workspace_root.join("lkh").join("lkh.tgz");
-    if vendored_archive.exists() {
-        println!("cargo:rerun-if-changed={}", vendored_archive.display());
-    }
 
     build_unix(workspace_root, &out_dir)
 }
 
 fn build_windows(workspace_root: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>> {
-    let root_exe = workspace_root.join(LKH_WINDOWS_EXE);
-    if !root_exe.exists() {
+    // Prefer an explicit path to LKH.exe to avoid encouraging users to place binaries in the repo.
+    // Falls back to ./LKH.exe for convenience (but that file must not be committed).
+    let exe_path = if let Some(p) = env_non_empty(LKH_WINDOWS_EXE_PATH_ENV) {
+        PathBuf::from(p)
+    } else {
+        workspace_root.join(LKH_WINDOWS_EXE)
+    };
+
+    if exe_path.exists() {
+        println!("cargo:rerun-if-changed={}", exe_path.display());
+    }
+
+    if !exe_path.exists() {
         return Err(format!(
-            "windows build requires {LKH_WINDOWS_EXE} in repository root ({}). \
-             download it from {LKH_WINDOWS_URL}",
-            root_exe.display(),
+            "windows build requires {LKH_WINDOWS_EXE}.\n             Provide it via the {LKH_WINDOWS_EXE_PATH_ENV} environment variable (recommended),\n             e.g. in PowerShell: $env:{LKH_WINDOWS_EXE_PATH_ENV}='C:\\path\\to\\{LKH_WINDOWS_EXE}'; cargo build --features fetch-lkh\n             Or place it at repository root ({}).\n             Download from: {LKH_WINDOWS_URL}",
+            workspace_root.join(LKH_WINDOWS_EXE).display(),
         )
         .into());
     }
-
     if let Some(expected) = env_non_empty(LKH_WINDOWS_SHA256_ENV) {
-        verify_sha256(&root_exe, &expected)?;
+        verify_sha256(&exe_path, &expected)?;
     }
 
     let bundled_bin = out_dir.join("lkh.bin");
-    copy_if_different(&root_exe, &bundled_bin)?;
+    copy_if_different(&exe_path, &bundled_bin)?;
     write_embedded_source(out_dir, &bundled_bin)?;
     Ok(())
 }
@@ -157,14 +161,6 @@ fn ensure_archive(workspace_root: &Path, archive_path: &Path) -> Result<(), Box<
         return Ok(());
     }
 
-    let vendored = workspace_root.join("lkh").join("lkh.tgz");
-    if vendored.exists() {
-        verify_archive(&vendored)?;
-        fs::copy(&vendored, archive_path)?;
-        verify_archive(archive_path)?;
-        return Ok(());
-    }
-
     let mut download_errors = Vec::new();
     if let Some(url) = env_non_empty("TSP_MT_LKH_URL") {
         if let Err(err) = try_download_and_verify_archive(&url, archive_path) {
@@ -184,9 +180,8 @@ fn ensure_archive(workspace_root: &Path, archive_path: &Path) -> Result<(), Box<
 
     Err(format!(
         "failed to download and verify LKH archive. \
-         Tried: {}. place a verified fallback at {} or set TSP_MT_LKH_URL/TSP_MT_LKH_SHA256",
+         Tried: {}. set TSP_MT_LKH_URL/TSP_MT_LKH_SHA256",
         download_errors.join(" | "),
-        vendored.display(),
     )
     .into())
 }

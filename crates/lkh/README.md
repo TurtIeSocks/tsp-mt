@@ -19,11 +19,11 @@ workspace.
 
 ## Features
 
-- `embedded-lkh` (default):
+- `fetch-lkh` (default):
   - Build-time embeds an LKH executable into the Rust artifact.
   - Runtime extracts that embedded executable to the OS temp directory.
   - `LkhSolver::run()` is available only with this feature.
-- Without `embedded-lkh`:
+- Without `fetch-lkh`:
   - Use `LkhSolver::run_with_exe(path)` and manage the LKH binary yourself.
 
 ## Quickstart
@@ -53,7 +53,7 @@ fn main() -> lkh::LkhResult<()> {
 
 ## Embedded LKH Security Model
 
-Build script behavior (`embedded-lkh` enabled):
+Build script behavior (`fetch-lkh` enabled):
 
 1. Resolve archive from:
    - existing build output cache, then
@@ -80,9 +80,9 @@ embedded payload and written via temporary-file + rename flow.
 
 ## Platform Notes
 
-- Linux/macOS (`embedded-lkh`):
+- Linux/macOS (`fetch-lkh`):
   - Requires `tar`, `make`, and `curl` or `wget` available in PATH.
-- Windows (`embedded-lkh`):
+- Windows (`fetch-lkh`):
   - Requires `LKH.exe` present at repository root during build.
   - Build script embeds this file directly.
 - Any platform (`no-default-features`):

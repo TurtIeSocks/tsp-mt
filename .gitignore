@@ -2,12 +2,11 @@
 debug/
 target/
 
-# App
-/.temp
-
 # User
 /*.txt
 /*.exe
+/*.tgz
 
 # Dev
 /old
+/.temp

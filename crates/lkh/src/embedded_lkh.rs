@@ -1,4 +1,4 @@
-//! Embedded LKH executable support (`embedded-lkh` feature).
+//! Embedded LKH executable support (`fetch-lkh` feature).
 //!
 //! This module exposes the resolved path of the embedded binary and ensures it
 //! exists on disk before use.
@@ -6,14 +6,14 @@
 //! # Example
 //!
 //! ```no_run
-//! #[cfg(feature = "embedded-lkh")]
+//! #[cfg(feature = "fetch-lkh")]
 //! fn main() -> lkh::LkhResult<()> {
 //!     let path = lkh::embedded_lkh::embedded_path()?;
 //!     println!("{}", path.display());
 //!     Ok(())
 //! }
 //!
-//! #[cfg(not(feature = "embedded-lkh"))]
+//! #[cfg(not(feature = "fetch-lkh"))]
 //! fn main() {}
 //! ```
 //!

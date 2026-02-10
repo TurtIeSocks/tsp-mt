@@ -4,6 +4,7 @@ use std::{
     process,
 };
 
+#[cfg(feature = "fetch-lkh")]
 use lkh::embedded_lkh;
 use log::LevelFilter;
 use tsp_mt_derive::{CliOptions, CliValue, KvDisplay};
@@ -144,11 +145,20 @@ impl Default for SolverOptions {
 
 impl SolverOptions {
     pub fn from_args() -> Result<Self> {
-        let (mut options, saw_lkh_exe) = Self::parse_from_iter(env::args().skip(1))?;
-        if !saw_lkh_exe {
-            options.lkh_exe = embedded_lkh::embedded_path()?;
+        #[cfg(not(feature = "fetch-lkh"))]
+        {
+            let (options, _) = Self::parse_from_iter(env::args().skip(1))?;
+            Ok(options)
         }
-        Ok(options)
+
+        #[cfg(feature = "fetch-lkh")]
+        {
+            let (mut options, saw_lkh_exe) = Self::parse_from_iter(env::args().skip(1))?;
+            if !saw_lkh_exe {
+                options.lkh_exe = embedded_lkh::embedded_path()?;
+            }
+            Ok(options)
+        }
     }
 
     fn parse_from_iter<I, S>(args: I) -> Result<(Self, bool)>

@@ -36,7 +36,7 @@ pub fn lkh_single(input: SolverInput, options: SolverOptions) -> LkhResult<Vec<L
             MULTI_SEED_TRACE_LEVEL,
         ),
     )?
-    .run()?;
+    .run_with_exe(&options.lkh_exe)?;
 
     Ok(tour
         .zero_based_tour()?
@@ -76,7 +76,7 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> LkhResult<V
                     MULTI_SEED_TRACE_LEVEL,
                 ),
             )?
-            .run()?;
+            .run_with_exe(&options.lkh_exe)?;
 
             let order = tour.zero_based_tour()?;
             let length = cycle_length(&points, &order);
@@ -159,7 +159,7 @@ pub fn lkh_multi_parallel(input: SolverInput, options: SolverOptions) -> LkhResu
                 CENTROID_TRACE_LEVEL,
             ),
         )?
-        .run()?;
+        .run_with_exe(&options.lkh_exe)?;
 
         order_tour.zero_based_tour()?
     };

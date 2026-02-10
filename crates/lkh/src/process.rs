@@ -22,7 +22,7 @@ use std::{
 
 use lkh_derive::WithMethods;
 
-#[cfg(feature = "embedded-lkh")]
+#[cfg(feature = "fetch-lkh")]
 use crate::embedded_lkh;
 use crate::{LkhError, LkhResult, with_methods_error};
 
@@ -73,7 +73,7 @@ impl LkhProcess {
         }
     }
 
-    #[cfg(feature = "embedded-lkh")]
+    #[cfg(feature = "fetch-lkh")]
     /// Creates a process wrapper backed by the embedded LKH executable.
     pub fn try_default() -> LkhResult<Self> {
         Ok(Self {
@@ -84,7 +84,7 @@ impl LkhProcess {
     }
 }
 
-#[cfg(feature = "embedded-lkh")]
+#[cfg(feature = "fetch-lkh")]
 impl Default for LkhProcess {
     fn default() -> Self {
         Self::try_default().expect("failed to initialize default embedded LKH process")

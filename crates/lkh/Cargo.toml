@@ -13,8 +13,8 @@ keywords      = ["tsp", "routing", "lkh"]
 categories    = ["algorithms"]
 
 [features]
-default      = ["embedded-lkh"]
-embedded-lkh = []
+default   = []
+fetch-lkh = []
 
 [dependencies]
 thiserror  = "2.0.18"
