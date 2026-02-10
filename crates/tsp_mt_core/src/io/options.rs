@@ -151,7 +151,13 @@ impl SolverOptions {
     pub fn from_args() -> Result<Self> {
         #[cfg(not(feature = "fetch-lkh"))]
         {
-            let (options, _) = Self::parse_from_iter(env::args().skip(1))?;
+            let (options, saw_lkh_exe) = Self::parse_from_iter(env::args().skip(1))?;
+            if !saw_lkh_exe {
+                return Err(Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "`fetch-lkh feature is not enabled and the `--lkh-exe` arg was not provided",
+                )));
+            }
             Ok(options)
         }
 

@@ -65,15 +65,22 @@ pub fn derive_kv_display_inner(item: TokenStream) -> TokenStream {
         });
     }
 
+    let longest = keys
+        .iter()
+        .max_by(|a, b| a.value().len().cmp(&b.value().len()))
+        .map(|opt| opt.value().len())
+        .unwrap_or(0);
     let format_parts: Vec<String> = keys
         .iter()
-        .enumerate()
-        .map(|(idx, key)| {
-            let sep = if idx == 0 { "" } else { " " };
-            format!("{sep}{}={{}}", key.value())
+        .map(|key| {
+            let value = key.value();
+            let local_len = longest - value.len();
+            let local_spaces = (0..local_len).map(|_| " ").collect::<String>();
+
+            format!("\t{value}{local_spaces} = {{}}",)
         })
         .collect();
-    let format_lit = syn::LitStr::new(&format_parts.concat(), Span::call_site());
+    let format_lit = syn::LitStr::new(&format!("\n{}", format_parts.join("\n")), Span::call_site());
 
     let expanded = quote! {
         impl std::fmt::Display for #struct_ident {
