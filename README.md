@@ -127,9 +127,15 @@ Both `--flag value` and `--flag=value` work.
 | `--centroid-order-seed <u64>`         | int                 |                    `999` | Seed for chunk-centroid ordering run                                          |
 | `--centroid-order-max-trials <usize>` | int                 |                  `20000` | LKH `MAX_TRIALS` for centroid ordering                                        |
 | `--centroid-order-time-limit <usize>` | int                 |                     `10` | LKH `TIME_LIMIT` seconds for centroid ordering                                |
+| `--solver-mode <value>`               | enum                |         `multi-parallel` | One of: `single`, `multi-seed`, `multi-parallel`                              |
 | `--boundary-2opt-window <usize>`      | int                 |                    `500` | Boundary-local 2-opt window during chunk stitching                            |
 | `--boundary-2opt-passes <usize>`      | int                 |                     `50` | Boundary-local 2-opt passes during chunk stitching                            |
+| `--spike-repair-top-n <usize>`        | int                 |                     `48` | Number of longest edges targeted by post-stitch spike-repair                  |
+| `--spike-repair-window <usize>`       | int                 |                    `700` | 2-opt window used in post-stitch spike-repair                                 |
+| `--spike-repair-passes <usize>`       | int                 |                      `5` | 2-opt passes used in post-stitch spike-repair                                 |
 | `--outlier-threshold <f64>`           | float               |                   `10.0` | Distance threshold (meters) for counting spike/outlier jumps in route metrics |
+| `--cleanup[=<bool>]`                  | bool (optional val) |                   `true` | If provided without value, sets to `true`                                     |
+| `--no-cleanup`                        | flag                |                    `n/a` | Forces `cleanup=false`                                                        |
 | `--log-level <value>`                 | enum                |                   `warn` | One of: `error`, `warn`, `warning`, `info`, `debug`, `trace`, `off`           |
 | `--log-format <value>`                | enum                |                `compact` | One of: `compact`, `pretty`                                                   |
 | `--log-timestamp[=<bool>]`            | bool (optional val) |                   `true` | If provided without value, sets to `true`                                     |
@@ -137,7 +143,7 @@ Both `--flag value` and `--flag=value` work.
 | `--log-output <path>`                 | path                |                 `stderr` | Write logs/metrics to this file instead of stderr                             |
 | `--help`, `-h`                        | flag                |                    `n/a` | Prints usage and exits                                                        |
 
-Accepted boolean values for `--log-timestamp=<bool>`:  
+Accepted boolean values for `--log-timestamp=<bool>` and `--cleanup=<bool>`:  
 `1/0`, `true/false`, `yes/no`, `on/off` (common case variants supported).
 
 ## Common Errors

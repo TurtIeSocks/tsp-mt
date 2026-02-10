@@ -47,6 +47,15 @@ pub struct SolverOptions {
     /// Number of passes for boundary-local 2-opt refinement.
     #[cli(long = "boundary-2opt-passes")]
     pub boundary_2opt_passes: usize,
+    /// Number of longest edges targeted by the post-stitch spike-repair pass.
+    #[cli(long = "spike-repair-top-n")]
+    pub spike_repair_top_n: usize,
+    /// 2-opt window used by the post-stitch spike-repair pass.
+    #[cli(long = "spike-repair-window")]
+    pub spike_repair_window: usize,
+    /// 2-opt passes used by the post-stitch spike-repair pass.
+    #[cli(long = "spike-repair-passes")]
+    pub spike_repair_passes: usize,
     /// Distance threshold (meters) used when counting route outlier spikes in metrics logs.
     #[cli(long = "outlier-threshold")]
     pub outlier_threshold: f64,
@@ -120,6 +129,9 @@ impl Default for SolverOptions {
             cleanup: true,
             boundary_2opt_window: 500,
             boundary_2opt_passes: 50,
+            spike_repair_top_n: 48,
+            spike_repair_window: 700,
+            spike_repair_passes: 5,
             outlier_threshold: 10.0,
             log_level: LogLevel::Warn,
             log_format: LogFormat::Compact,
@@ -235,6 +247,9 @@ impl SolverOptions {
             "  --solver-mode <single|multi-seed|multi-parallel>\n",
             "  --boundary-2opt-window <usize>\n",
             "  --boundary-2opt-passes <usize>\n",
+            "  --spike-repair-top-n <usize>\n",
+            "  --spike-repair-window <usize>\n",
+            "  --spike-repair-passes <usize>\n",
             "  --outlier-threshold <f64>\n",
             "  --log-level <error|warn|info|debug|trace|off>\n",
             "  --log-format <compact|pretty>\n",
@@ -348,6 +363,9 @@ mod tests {
             "--solver-mode=single",
             "--boundary-2opt-window=8",
             "--boundary-2opt-passes=7",
+            "--spike-repair-top-n=20",
+            "--spike-repair-window=240",
+            "--spike-repair-passes=2",
             "--outlier-threshold=12.5",
             "--log-level=debug",
             "--log-format=pretty",
@@ -366,6 +384,9 @@ mod tests {
         assert_eq!(options.solver_mode, SolverMode::Single);
         assert_eq!(options.boundary_2opt_window, 8);
         assert_eq!(options.boundary_2opt_passes, 7);
+        assert_eq!(options.spike_repair_top_n, 20);
+        assert_eq!(options.spike_repair_window, 240);
+        assert_eq!(options.spike_repair_passes, 2);
         assert_eq!(options.outlier_threshold, 12.5);
         assert_eq!(options.log_level, LogLevel::Debug);
         assert_eq!(options.log_format, LogFormat::Pretty);
