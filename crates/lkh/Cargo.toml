@@ -1,16 +1,16 @@
 [package]
-name        = "lkh"
-version     = "0.1.0"
-edition     = "2024"
-build       = "build.rs"
-description = "LKH process/config integration helpers"
-license     = "Apache-2.0"
-readme      = "README.md"
-repository  = "https://github.com/rin/tsp-mt"
-homepage    = "https://github.com/rin/tsp-mt"
+name          = "lkh"
+version       = "0.1.0"
+edition       = "2024"
+build         = "build.rs"
+description   = "LKH process/config integration helpers"
+license       = "Apache-2.0"
+readme        = "README.md"
+repository    = "https://github.com/TurtIeSocks/tsp-mt"
+homepage      = "https://github.com/TurtIeSocks/tsp-mt"
 documentation = "https://docs.rs/lkh"
-keywords    = ["tsp", "routing", "lkh"]
-categories  = ["algorithms"]
+keywords      = ["tsp", "routing", "lkh"]
+categories    = ["algorithms"]
 
 [features]
 default      = ["embedded-lkh"]

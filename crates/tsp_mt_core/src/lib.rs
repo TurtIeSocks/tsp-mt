@@ -2,7 +2,6 @@
 //! Includes direct parallel solving and H3 chunked solving for large inputs.
 
 mod algo;
-mod constants;
 mod error;
 pub mod file_cleanup;
 mod geo;

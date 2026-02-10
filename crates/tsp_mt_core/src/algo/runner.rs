@@ -10,10 +10,11 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 use rayon::prelude::*;
 
 use crate::{
-    LKHNode, SolverInput, SolverOptions, constants::MIN_CYCLE_POINTS, geometry, h3_chunking,
-    projection::PlaneProjection, stitching,
+    LKHNode, SolverInput, SolverOptions, geometry, h3_chunking, projection::PlaneProjection,
+    stitching,
 };
 
+const MIN_CYCLE_POINTS: usize = 3;
 const DEFAULT_MAX_CANDIDATES: usize = 32;
 const DEFAULT_BASE_SEED: u64 = 12_345;
 const SINGLE_RUNS: usize = 1;
@@ -27,6 +28,7 @@ const MIN_TIME_LIMIT_SECONDS: usize = 2;
 const THREAD_FALLBACK_PARALLELISM: usize = 2;
 const THREAD_RESERVED_CORES: usize = 1;
 const MAX_CENTROIDS_WITH_TRIVIAL_ORDER: usize = 2;
+const ROUNDER_FACTOR: f64 = 1000.0;
 
 const ERR_NO_RESULTS: &str = "No results";
 const ERR_INVALID_POINT: &str = "Input contains invalid lat/lng values";
@@ -40,7 +42,11 @@ fn build_problem(points: &[LKHNode]) -> TsplibProblem {
                 .iter()
                 .enumerate()
                 .map(|(idx, n)| {
-                    NodeCoord::twod(idx + 1, (n.y * 1000.0).round(), (n.x * 1000.0).round())
+                    NodeCoord::twod(
+                        idx + 1,
+                        (n.y * ROUNDER_FACTOR).round(),
+                        (n.x * ROUNDER_FACTOR).round(),
+                    )
                 })
                 .collect::<Vec<_>>(),
         )
