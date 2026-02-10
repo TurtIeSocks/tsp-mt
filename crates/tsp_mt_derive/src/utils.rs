@@ -64,14 +64,12 @@ pub fn inner_of_option(ty: &Type) -> Option<&Type> {
             return None;
         }
 
-        if let Some(seg) = path.segments.last() {
-            if let PathArguments::AngleBracketed(AngleBracketedGenericArguments { args, .. }) =
+        if let Some(seg) = path.segments.last()
+            && let PathArguments::AngleBracketed(AngleBracketedGenericArguments { args, .. }) =
                 &seg.arguments
-            {
-                if let Some(GenericArgument::Type(t)) = args.first() {
-                    return Some(t);
-                }
-            }
+            && let Some(GenericArgument::Type(t)) = args.first()
+        {
+            return Some(t);
         }
     }
     None
@@ -104,10 +102,10 @@ pub fn is_phantom_data(ty: &Type) -> bool {
 /// Try to derive a sensible snake-case identifier from a field’s type.
 /// Falls back to `f{idx}` if we cannot get a usable path identifier.
 pub fn ident_from_type(ty: &Type, idx: usize) -> Ident {
-    if let Type::Path(TypePath { path, .. }) = ty {
-        if let Some(seg) = path.segments.last() {
-            return format_ident!("{}", to_snake_case(&seg.ident.to_string()));
-        }
+    if let Type::Path(TypePath { path, .. }) = ty
+        && let Some(seg) = path.segments.last()
+    {
+        return format_ident!("{}", to_snake_case(&seg.ident.to_string()));
     }
     // Fallback
     format_ident!("f{idx}")
