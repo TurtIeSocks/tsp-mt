@@ -21,6 +21,8 @@ thiserror     = "2.0.18"
 ctrlc         = "3.4.7"
 tsp_mt_derive = { path = "../tsp_mt_derive" }
 lkh           = { path = "../lkh" }
+toml          = "0.8.23"
+walkdir       = "2.5.0"
 
 [features]
 default   = []

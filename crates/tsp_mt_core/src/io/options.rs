@@ -8,8 +8,12 @@ use std::{
 use lkh::embedded_lkh;
 use log::LevelFilter;
 use tsp_mt_derive::{CliOptions, CliValue, KvDisplay};
+use walkdir::WalkDir;
 
 use crate::{Error, Result};
+
+const CONFIG_FILE_NAME: &str = ".tsp-mt.config.toml";
+const CONFIG_PATH_ENV: &str = "TSP_MT_CONFIG";
 
 /// Runtime options for LKH solving behavior.
 #[derive(Clone, Debug, CliOptions, KvDisplay)]
@@ -149,9 +153,11 @@ impl Default for SolverOptions {
 
 impl SolverOptions {
     pub fn from_args() -> Result<Self> {
+        let cli_args: Vec<String> = env::args().skip(1).collect();
+
         #[cfg(not(feature = "fetch-lkh"))]
         {
-            let (options, saw_lkh_exe) = Self::parse_from_iter(env::args().skip(1))?;
+            let (options, saw_lkh_exe) = Self::parse_with_config(cli_args)?;
             if !saw_lkh_exe {
                 return Err(Error::Io(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
@@ -163,7 +169,7 @@ impl SolverOptions {
 
         #[cfg(feature = "fetch-lkh")]
         {
-            let (mut options, saw_lkh_exe) = Self::parse_from_iter(env::args().skip(1))?;
+            let (mut options, saw_lkh_exe) = Self::parse_with_config(cli_args)?;
             if !saw_lkh_exe {
                 options.lkh_exe = embedded_lkh::embedded_path()?;
             }
@@ -171,12 +177,44 @@ impl SolverOptions {
         }
     }
 
+    fn parse_with_config<I, S>(cli_args: I) -> Result<(Self, bool)>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let mut options = Self::default();
+        let mut saw_lkh_exe = false;
+
+        if let Some(config_path) = find_config_file()? {
+            let config_args = Self::config_args_from_path(&config_path)?;
+            saw_lkh_exe |= Self::apply_args(&mut options, config_args)?;
+        }
+
+        saw_lkh_exe |= Self::apply_args(&mut options, cli_args)?;
+
+        options.work_dir = normalize_path(options.work_dir)?;
+        options.lkh_exe = normalize_path(options.lkh_exe)?;
+        Ok((options, saw_lkh_exe))
+    }
+
+    #[cfg(test)]
     fn parse_from_iter<I, S>(args: I) -> Result<(Self, bool)>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
         let mut options = Self::default();
+        let saw_lkh_exe = Self::apply_args(&mut options, args)?;
+        options.work_dir = normalize_path(options.work_dir)?;
+        options.lkh_exe = normalize_path(options.lkh_exe)?;
+        Ok((options, saw_lkh_exe))
+    }
+
+    fn apply_args<I, S>(options: &mut Self, args: I) -> Result<bool>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
         let mut saw_lkh_exe = false;
         let mut args = args
             .into_iter()
@@ -248,10 +286,40 @@ impl SolverOptions {
                 }
             }
         }
-        options.work_dir = normalize_path(options.work_dir)?;
-        options.lkh_exe = normalize_path(options.lkh_exe)?;
+        Ok(saw_lkh_exe)
+    }
 
-        Ok((options, saw_lkh_exe))
+    fn config_args_from_path(path: &Path) -> Result<Vec<String>> {
+        let contents = std::fs::read_to_string(path).map_err(Error::Io)?;
+        Self::config_args_from_str(&contents)
+            .map_err(|e| Error::invalid_input(format!("{e} (config: {})", path.display())))
+    }
+
+    fn config_args_from_str(contents: &str) -> std::result::Result<Vec<String>, String> {
+        let value: toml::Value = toml::from_str(contents)
+            .map_err(|e| format!("Invalid TOML in {CONFIG_FILE_NAME}: {e}"))?;
+        let Some(table) = value.as_table() else {
+            return Err(format!("Config file must be a TOML table at top-level"));
+        };
+
+        let mut args = Vec::with_capacity(table.len());
+        for (raw_key, value) in table {
+            let key = raw_key.replace('_', "-");
+            let arg = match value {
+                toml::Value::String(v) => format!("--{key}={v}"),
+                toml::Value::Integer(v) => format!("--{key}={v}"),
+                toml::Value::Float(v) => format!("--{key}={v}"),
+                toml::Value::Boolean(v) => format!("--{key}={v}"),
+                _ => {
+                    return Err(format!(
+                        "Unsupported value type for key `{raw_key}` in config file"
+                    ));
+                }
+            };
+            args.push(arg);
+        }
+
+        Ok(args)
     }
 
     pub fn usage() -> &'static str {
@@ -318,6 +386,68 @@ impl SolverOptions {
 
 fn default_work_dir() -> PathBuf {
     env::temp_dir().join(format!("tsp-mt-{}", process::id()))
+}
+
+fn find_config_file() -> Result<Option<PathBuf>> {
+    if let Some(path) = config_from_env()? {
+        return Ok(Some(path));
+    }
+    if let Some(path) = config_from_current_dir_tree()? {
+        return Ok(Some(path));
+    }
+
+    #[cfg(unix)]
+    {
+        Ok(find_config_system_wide_unix())
+    }
+    #[cfg(not(unix))]
+    {
+        Ok(None)
+    }
+}
+
+fn config_from_env() -> Result<Option<PathBuf>> {
+    let Ok(raw) = env::var(CONFIG_PATH_ENV) else {
+        return Ok(None);
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(normalize_path(PathBuf::from(trimmed))?))
+}
+
+fn config_from_current_dir_tree() -> Result<Option<PathBuf>> {
+    let mut dir = env::current_dir().map_err(Error::Io)?;
+    loop {
+        let candidate = dir.join(CONFIG_FILE_NAME);
+        if candidate.is_file() {
+            return Ok(Some(normalize_path(candidate)?));
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    Ok(None)
+}
+
+#[cfg(unix)]
+fn find_config_system_wide_unix() -> Option<PathBuf> {
+    for entry in WalkDir::new("/")
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|entry| entry.ok())
+    {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if entry.file_name() == CONFIG_FILE_NAME {
+            if let Ok(path) = normalize_path(entry.path().to_path_buf()) {
+                return Some(path);
+            }
+        }
+    }
+    None
 }
 
 fn check_path(path_str: &str) -> Option<PathBuf> {
@@ -438,6 +568,55 @@ mod tests {
         assert_eq!(options.log_output, "run.log");
         assert_eq!(options.input, "points.txt");
         assert_eq!(options.output, "route.txt");
+    }
+
+    #[test]
+    fn config_args_from_str_supports_basic_types_and_snake_case_keys() {
+        let args = SolverOptions::config_args_from_str(
+            r#"
+            max_chunk_size = 42
+            projection_radius = 123.5
+            cleanup = false
+            log_level = "info"
+            "#,
+        )
+        .expect("config parse");
+
+        assert!(args.contains(&"--max-chunk-size=42".to_string()));
+        assert!(args.contains(&"--projection-radius=123.5".to_string()));
+        assert!(args.contains(&"--cleanup=false".to_string()));
+        assert!(args.contains(&"--log-level=info".to_string()));
+    }
+
+    #[test]
+    fn config_args_from_str_rejects_non_scalar_values() {
+        let err = SolverOptions::config_args_from_str(
+            r#"
+            input = ["a", "b"]
+            "#,
+        )
+        .expect_err("array values should be rejected");
+        assert!(err.contains("Unsupported value type"));
+    }
+
+    #[test]
+    fn cli_values_override_config_values() {
+        let config_args = SolverOptions::config_args_from_str(
+            r#"
+            max_chunk_size = 12
+            log_level = "error"
+            "#,
+        )
+        .expect("config parse");
+
+        let mut options = SolverOptions::default();
+        let _ = SolverOptions::apply_args(&mut options, config_args).expect("config apply");
+        let _ =
+            SolverOptions::apply_args(&mut options, ["--max-chunk-size=99", "--log-level=debug"])
+                .expect("cli apply");
+
+        assert_eq!(options.max_chunk_size, 99);
+        assert_eq!(options.log_level, LogLevel::Debug);
     }
 
     #[test]
