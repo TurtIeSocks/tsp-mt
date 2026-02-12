@@ -47,14 +47,16 @@ fn main() -> Result<()> {
 
     let options = SolverOptions::from_args()?;
     logging::init_logger(&options)?;
-
     // We needed to init the logger before the timer macro
     main_inner(options)
 }
 
 #[tsp_mt_derive::timer("main")]
 fn main_inner(options: SolverOptions) -> Result<()> {
+    let mut options = options;
     let input = SolverInput::from_args(&options)?;
+    options.set_max_chunk_size(input.points_len());
+
     let output_path = options.output_path();
     let outlier_threshold = options.outlier_threshold;
     let _cleanup_guard = WorkDirCleanupGuard::new(&options.work_dir, options.cleanup);

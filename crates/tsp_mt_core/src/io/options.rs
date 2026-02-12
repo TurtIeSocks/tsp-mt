@@ -131,7 +131,7 @@ impl Default for SolverOptions {
             lkh_exe: PathBuf::new(),
             work_dir: default_work_dir(),
             projection_radius: 70.0,
-            max_chunk_size: 5_000,
+            max_chunk_size: 1_000,
             centroid_order_seed: 999,
             centroid_order_max_trials: 20_000,
             centroid_order_time_limit: 10,
@@ -177,6 +177,14 @@ impl SolverOptions {
                 options.lkh_exe = embedded_lkh::embedded_path()?;
             }
             Ok(options)
+        }
+    }
+
+    pub fn set_max_chunk_size(&mut self, n: usize) {
+        if !env::args().any(|arg| arg.starts_with("--max-chunk-size")) {
+            let dynamic_chunk_size = (n / 4).max(500).min(5_000);
+            log::info!("options: dynamic_chunk_size = {dynamic_chunk_size}");
+            self.max_chunk_size = dynamic_chunk_size;
         }
     }
 

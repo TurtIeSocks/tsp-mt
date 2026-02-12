@@ -29,7 +29,7 @@ pub fn lkh_single(input: SolverInput, options: SolverOptions) -> LkhResult<Vec<L
         &problem_file_path,
         DEFAULT_BASE_SEED,
         scaled_max_trials(input.n()),
-        scaled_time_limit_seconds(input.n()),
+        scaled_time_limit_seconds(input.n()) / 2.0,
         MULTI_SEED_TRACE_LEVEL,
     );
     maybe_attach_initial_tour_file(
