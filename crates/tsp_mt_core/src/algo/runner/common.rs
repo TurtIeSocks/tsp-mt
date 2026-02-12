@@ -7,7 +7,7 @@ use lkh::{
     solver::LkhSolver,
     tour::{TsplibTour, TsplibTourType},
 };
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 use crate::{LKHNode, SolverInput, SolverOptions, h3_chunking, stitching};
 
