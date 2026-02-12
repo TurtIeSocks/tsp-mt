@@ -182,7 +182,7 @@ impl SolverOptions {
 
     pub fn set_max_chunk_size(&mut self, n: usize) {
         if !env::args().any(|arg| arg.starts_with("--max-chunk-size")) {
-            let dynamic_chunk_size = (n / 4).max(500).min(5_000);
+            let dynamic_chunk_size = (n / 4).clamp(500, 5_000);
             log::info!("options: dynamic_chunk_size = {dynamic_chunk_size}");
             self.max_chunk_size = dynamic_chunk_size;
         }
