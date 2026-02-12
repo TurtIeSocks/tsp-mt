@@ -12,9 +12,9 @@ mod metric_spike;
 use common::{
     CENTROID_TRACE_LEVEL, DEFAULT_BASE_SEED, ERR_NO_RESULTS, MAX_CENTROIDS_WITH_TRIVIAL_ORDER,
     MULTI_SEED_TRACE_LEVEL, available_seed_runs, build_problem, build_stitching_tuning,
-    canonicalize_cycle_order, cycle_length, generate_seeds, scaled_max_trials,
-    scaled_time_limit_seconds, seeded_params, solve_chunk_indices, validate_chunk_size,
-    validate_min_cycle_points, validate_outlier_threshold, validate_points,
+    canonicalize_cycle_order, cycle_length, generate_seeds, maybe_attach_initial_tour_file,
+    scaled_max_trials, scaled_time_limit_seconds, seeded_params, solve_chunk_indices,
+    validate_chunk_size, validate_min_cycle_points, validate_outlier_threshold, validate_points,
     validate_projection_radius,
 };
 use metric_spike::{log_metric_spike_breakdown, repair_metric_spikes_with_global_two_opt};
@@ -25,18 +25,22 @@ pub fn lkh_single(input: SolverInput, options: SolverOptions) -> LkhResult<Vec<L
     validate_points(&input)?;
 
     let problem_file_path = options.work_dir.join("problem.tsp");
+    let mut params = seeded_params(
+        &problem_file_path,
+        DEFAULT_BASE_SEED,
+        scaled_max_trials(input.n()),
+        scaled_time_limit_seconds(input.n()),
+        MULTI_SEED_TRACE_LEVEL,
+    );
+    maybe_attach_initial_tour_file(
+        &mut params,
+        &problem_file_path,
+        input.n(),
+        options.use_initial_tour,
+    )?;
 
-    let tour = LkhSolver::new(
-        build_problem(&input.nodes),
-        seeded_params(
-            &problem_file_path,
-            DEFAULT_BASE_SEED,
-            scaled_max_trials(input.n()),
-            scaled_time_limit_seconds(input.n()),
-            MULTI_SEED_TRACE_LEVEL,
-        ),
-    )?
-    .run_with_exe(&options.lkh_exe)?;
+    let tour =
+        LkhSolver::new(build_problem(&input.nodes), params)?.run_with_exe(&options.lkh_exe)?;
 
     Ok(tour
         .zero_based_tour()?
@@ -66,17 +70,21 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> LkhResult<V
         .map(|(run_idx, seed)| -> LkhResult<(Vec<usize>, f64)> {
             let run_dir = work_dir.join(format!("seed_{run_idx}"));
             let problem_file = run_dir.join("problem.tsp");
-            let tour = LkhSolver::new(
-                build_problem(&projected_points),
-                seeded_params(
-                    &problem_file,
-                    seed,
-                    max_trials,
-                    time_limit,
-                    MULTI_SEED_TRACE_LEVEL,
-                ),
-            )?
-            .run_with_exe(&options.lkh_exe)?;
+            let mut params = seeded_params(
+                &problem_file,
+                seed,
+                max_trials,
+                time_limit,
+                MULTI_SEED_TRACE_LEVEL,
+            );
+            maybe_attach_initial_tour_file(
+                &mut params,
+                &problem_file,
+                projected_points.len(),
+                options.use_initial_tour,
+            )?;
+            let tour = LkhSolver::new(build_problem(&projected_points), params)?
+                .run_with_exe(&options.lkh_exe)?;
 
             let order = tour.zero_based_tour()?;
             let length = cycle_length(&points, &order);
@@ -131,6 +139,7 @@ pub fn lkh_multi_parallel(input: SolverInput, options: SolverOptions) -> LkhResu
                 &projected_points,
                 &work_dir,
                 &options.lkh_exe,
+                options.use_initial_tour,
             )
         })
         .collect();
@@ -149,17 +158,21 @@ pub fn lkh_multi_parallel(input: SolverInput, options: SolverOptions) -> LkhResu
         (0..centroids.len()).collect::<Vec<_>>()
     } else {
         let order_problem_file = work_dir.join("chunk_order").join("problem.tsp");
-        let order_tour = LkhSolver::new(
-            build_problem(&projected_centroids),
-            seeded_params(
-                &order_problem_file,
-                options.centroid_order_seed,
-                options.centroid_order_max_trials,
-                options.centroid_order_time_limit as f64,
-                CENTROID_TRACE_LEVEL,
-            ),
-        )?
-        .run_with_exe(&options.lkh_exe)?;
+        let mut params = seeded_params(
+            &order_problem_file,
+            options.centroid_order_seed,
+            options.centroid_order_max_trials,
+            options.centroid_order_time_limit as f64,
+            CENTROID_TRACE_LEVEL,
+        );
+        maybe_attach_initial_tour_file(
+            &mut params,
+            &order_problem_file,
+            projected_centroids.len(),
+            options.use_initial_tour,
+        )?;
+        let order_tour = LkhSolver::new(build_problem(&projected_centroids), params)?
+            .run_with_exe(&options.lkh_exe)?;
 
         order_tour.zero_based_tour()?
     };

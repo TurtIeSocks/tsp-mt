@@ -8,12 +8,12 @@ use std::{
 use lkh::embedded_lkh;
 use log::LevelFilter;
 use tsp_mt_derive::{CliOptions, CliValue, KvDisplay};
-use walkdir::WalkDir;
+// use walkdir::WalkDir;
 
 use crate::{Error, Result};
 
-const CONFIG_FILE_NAME: &str = ".tsp-mt.config.toml";
-const CONFIG_PATH_ENV: &str = "TSP_MT_CONFIG";
+// const CONFIG_FILE_NAME: &str = ".tsp-mt.config.toml";
+// const CONFIG_PATH_ENV: &str = "TSP_MT_CONFIG";
 
 /// Runtime options for LKH solving behavior.
 #[derive(Clone, Debug, CliOptions, KvDisplay)]
@@ -64,6 +64,8 @@ pub struct SolverOptions {
     /// Distance threshold (meters) used when counting route outlier spikes in metrics logs.
     #[cli(long = "outlier-threshold")]
     pub outlier_threshold: f64,
+    /// Build and pass an `INITIAL_TOUR_FILE` to each LKH run using the input point order.
+    pub use_initial_tour: bool,
     /// Structured logging level.
     #[cli(long = "log-level", parse_with = "LogLevel::parse")]
     pub log_level: LogLevel,
@@ -141,6 +143,7 @@ impl Default for SolverOptions {
             spike_repair_window: 700,
             spike_repair_passes: 5,
             outlier_threshold: 10.0,
+            use_initial_tour: false,
             log_level: LogLevel::Warn,
             log_format: LogFormat::Compact,
             log_timestamp: true,
@@ -185,10 +188,10 @@ impl SolverOptions {
         let mut options = Self::default();
         let mut saw_lkh_exe = false;
 
-        if let Some(config_path) = find_config_file()? {
-            let config_args = Self::config_args_from_path(&config_path)?;
-            saw_lkh_exe |= Self::apply_args(&mut options, config_args)?;
-        }
+        // if let Some(config_path) = find_config_file()? {
+        //     let config_args = Self::config_args_from_path(&config_path)?;
+        //     saw_lkh_exe |= Self::apply_args(&mut options, config_args)?;
+        // }
 
         saw_lkh_exe |= Self::apply_args(&mut options, cli_args)?;
 
@@ -278,6 +281,20 @@ impl SolverOptions {
                     }
                     options.cleanup = false;
                 }
+                "use-initial-tour" => {
+                    options.use_initial_tour = match value {
+                        Some(v) => parse_bool(&name, &v)?,
+                        None => true,
+                    };
+                }
+                "no-use-initial-tour" => {
+                    if value.is_some() {
+                        return Err(Error::invalid_input(format!(
+                            "Flag --{name} does not take a value"
+                        )));
+                    }
+                    options.use_initial_tour = false;
+                }
                 _ => {
                     return Err(Error::invalid_input(format!(
                         "Unknown option: --{name}\n\n{}",
@@ -289,38 +306,38 @@ impl SolverOptions {
         Ok(saw_lkh_exe)
     }
 
-    fn config_args_from_path(path: &Path) -> Result<Vec<String>> {
-        let contents = std::fs::read_to_string(path).map_err(Error::Io)?;
-        Self::config_args_from_str(&contents)
-            .map_err(|e| Error::invalid_input(format!("{e} (config: {})", path.display())))
-    }
+    // fn config_args_from_path(path: &Path) -> Result<Vec<String>> {
+    //     let contents = std::fs::read_to_string(path).map_err(Error::Io)?;
+    //     Self::config_args_from_str(&contents)
+    //         .map_err(|e| Error::invalid_input(format!("{e} (config: {})", path.display())))
+    // }
 
-    fn config_args_from_str(contents: &str) -> std::result::Result<Vec<String>, String> {
-        let value: toml::Value = toml::from_str(contents)
-            .map_err(|e| format!("Invalid TOML in {CONFIG_FILE_NAME}: {e}"))?;
-        let Some(table) = value.as_table() else {
-            return Err(format!("Config file must be a TOML table at top-level"));
-        };
+    // fn config_args_from_str(contents: &str) -> std::result::Result<Vec<String>, String> {
+    //     let value: toml::Value = toml::from_str(contents)
+    //         .map_err(|e| format!("Invalid TOML in {CONFIG_FILE_NAME}: {e}"))?;
+    //     let Some(table) = value.as_table() else {
+    //         return Err(format!("Config file must be a TOML table at top-level"));
+    //     };
 
-        let mut args = Vec::with_capacity(table.len());
-        for (raw_key, value) in table {
-            let key = raw_key.replace('_', "-");
-            let arg = match value {
-                toml::Value::String(v) => format!("--{key}={v}"),
-                toml::Value::Integer(v) => format!("--{key}={v}"),
-                toml::Value::Float(v) => format!("--{key}={v}"),
-                toml::Value::Boolean(v) => format!("--{key}={v}"),
-                _ => {
-                    return Err(format!(
-                        "Unsupported value type for key `{raw_key}` in config file"
-                    ));
-                }
-            };
-            args.push(arg);
-        }
+    //     let mut args = Vec::with_capacity(table.len());
+    //     for (raw_key, value) in table {
+    //         let key = raw_key.replace('_', "-");
+    //         let arg = match value {
+    //             toml::Value::String(v) => format!("--{key}={v}"),
+    //             toml::Value::Integer(v) => format!("--{key}={v}"),
+    //             toml::Value::Float(v) => format!("--{key}={v}"),
+    //             toml::Value::Boolean(v) => format!("--{key}={v}"),
+    //             _ => {
+    //                 return Err(format!(
+    //                     "Unsupported value type for key `{raw_key}` in config file"
+    //                 ));
+    //             }
+    //         };
+    //         args.push(arg);
+    //     }
 
-        Ok(args)
-    }
+    //     Ok(args)
+    // }
 
     pub fn usage() -> &'static str {
         concat!(
@@ -348,6 +365,8 @@ impl SolverOptions {
             "  --no-log-timestamp\n",
             "  --cleanup[=<bool>]\n",
             "  --no-cleanup\n",
+            "  --use-initial-tour[=<bool>]\n",
+            "  --no-use-initial-tour\n",
             "  --log-output <path>\n",
             "  --input <path>\n",
             "  --output <path>\n",
@@ -388,67 +407,67 @@ fn default_work_dir() -> PathBuf {
     env::temp_dir().join(format!("tsp-mt-{}", process::id()))
 }
 
-fn find_config_file() -> Result<Option<PathBuf>> {
-    if let Some(path) = config_from_env()? {
-        return Ok(Some(path));
-    }
-    if let Some(path) = config_from_current_dir_tree()? {
-        return Ok(Some(path));
-    }
+// fn find_config_file() -> Result<Option<PathBuf>> {
+//     if let Some(path) = config_from_env()? {
+//         return Ok(Some(path));
+//     }
+//     if let Some(path) = config_from_current_dir_tree()? {
+//         return Ok(Some(path));
+//     }
 
-    #[cfg(unix)]
-    {
-        Ok(find_config_system_wide_unix())
-    }
-    #[cfg(not(unix))]
-    {
-        Ok(None)
-    }
-}
+//     #[cfg(unix)]
+//     {
+//         Ok(find_config_system_wide_unix())
+//     }
+//     #[cfg(not(unix))]
+//     {
+//         Ok(None)
+//     }
+// }
 
-fn config_from_env() -> Result<Option<PathBuf>> {
-    let Ok(raw) = env::var(CONFIG_PATH_ENV) else {
-        return Ok(None);
-    };
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Ok(None);
-    }
-    Ok(Some(normalize_path(PathBuf::from(trimmed))?))
-}
+// fn config_from_env() -> Result<Option<PathBuf>> {
+//     let Ok(raw) = env::var(CONFIG_PATH_ENV) else {
+//         return Ok(None);
+//     };
+//     let trimmed = raw.trim();
+//     if trimmed.is_empty() {
+//         return Ok(None);
+//     }
+//     Ok(Some(normalize_path(PathBuf::from(trimmed))?))
+// }
 
-fn config_from_current_dir_tree() -> Result<Option<PathBuf>> {
-    let mut dir = env::current_dir().map_err(Error::Io)?;
-    loop {
-        let candidate = dir.join(CONFIG_FILE_NAME);
-        if candidate.is_file() {
-            return Ok(Some(normalize_path(candidate)?));
-        }
-        if !dir.pop() {
-            break;
-        }
-    }
-    Ok(None)
-}
+// fn config_from_current_dir_tree() -> Result<Option<PathBuf>> {
+//     let mut dir = env::current_dir().map_err(Error::Io)?;
+//     loop {
+//         let candidate = dir.join(CONFIG_FILE_NAME);
+//         if candidate.is_file() {
+//             return Ok(Some(normalize_path(candidate)?));
+//         }
+//         if !dir.pop() {
+//             break;
+//         }
+//     }
+//     Ok(None)
+// }
 
-#[cfg(unix)]
-fn find_config_system_wide_unix() -> Option<PathBuf> {
-    for entry in WalkDir::new("/")
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|entry| entry.ok())
-    {
-        if !entry.file_type().is_file() {
-            continue;
-        }
-        if entry.file_name() == CONFIG_FILE_NAME {
-            if let Ok(path) = normalize_path(entry.path().to_path_buf()) {
-                return Some(path);
-            }
-        }
-    }
-    None
-}
+// #[cfg(unix)]
+// fn find_config_system_wide_unix() -> Option<PathBuf> {
+//     for entry in WalkDir::new("/")
+//         .follow_links(false)
+//         .into_iter()
+//         .filter_map(|entry| entry.ok())
+//     {
+//         if !entry.file_type().is_file() {
+//             continue;
+//         }
+//         if entry.file_name() == CONFIG_FILE_NAME {
+//             if let Ok(path) = normalize_path(entry.path().to_path_buf()) {
+//                 return Some(path);
+//             }
+//         }
+//     }
+//     None
+// }
 
 fn check_path(path_str: &str) -> Option<PathBuf> {
     let path_str = path_str.trim();
@@ -543,6 +562,7 @@ mod tests {
             "--log-format=pretty",
             "--log-timestamp=false",
             "--cleanup=false",
+            "--use-initial-tour=true",
             "--log-output=run.log",
             "--input=points.txt",
             "--output=route.txt",
@@ -565,60 +585,60 @@ mod tests {
         assert_eq!(options.log_format, LogFormat::Pretty);
         assert!(!options.log_timestamp);
         assert!(!options.cleanup);
+        assert!(options.use_initial_tour);
         assert_eq!(options.log_output, "run.log");
         assert_eq!(options.input, "points.txt");
         assert_eq!(options.output, "route.txt");
     }
 
-    #[test]
-    fn config_args_from_str_supports_basic_types_and_snake_case_keys() {
-        let args = SolverOptions::config_args_from_str(
-            r#"
-            max_chunk_size = 42
-            projection_radius = 123.5
-            cleanup = false
-            log_level = "info"
-            "#,
-        )
-        .expect("config parse");
+    // #[test]
+    // fn config_args_from_str_supports_basic_types_and_snake_case_keys() {
+    //     let args = SolverOptions::config_args_from_str(
+    //         r#"
+    //         max_chunk_size = 42
+    //         projection_radius = 123.5
+    //         cleanup = false
+    //         log_level = "info"
+    //         "#,
+    //     )
+    //     .expect("config parse");
 
-        assert!(args.contains(&"--max-chunk-size=42".to_string()));
-        assert!(args.contains(&"--projection-radius=123.5".to_string()));
-        assert!(args.contains(&"--cleanup=false".to_string()));
-        assert!(args.contains(&"--log-level=info".to_string()));
-    }
+    //     assert!(args.contains(&"--max-chunk-size=42".to_string()));
+    //     assert!(args.contains(&"--projection-radius=123.5".to_string()));
+    //     assert!(args.contains(&"--cleanup=false".to_string()));
+    //     assert!(args.contains(&"--log-level=info".to_string()));
+    // }
 
-    #[test]
-    fn config_args_from_str_rejects_non_scalar_values() {
-        let err = SolverOptions::config_args_from_str(
-            r#"
-            input = ["a", "b"]
-            "#,
-        )
-        .expect_err("array values should be rejected");
-        assert!(err.contains("Unsupported value type"));
-    }
+    // #[test]
+    // fn config_args_from_str_rejects_non_scalar_values() {
+    //     let err = SolverOptions::config_args_from_str(
+    //         r#"
+    //         input = ["a", "b"]
+    //         "#,
+    //     )
+    //     .expect_err("array values should be rejected");
+    //     assert!(err.contains("Unsupported value type"));
+    // }
 
-    #[test]
-    fn cli_values_override_config_values() {
-        let config_args = SolverOptions::config_args_from_str(
-            r#"
-            max_chunk_size = 12
-            log_level = "error"
-            "#,
-        )
-        .expect("config parse");
+    // #[test]
+    // fn cli_values_override_config_values() {
+    //     let config_args = SolverOptions::config_args_from_str(
+    //         r#"
+    //         max_chunk_size = 12
+    //         log_level = "error"
+    //         "#,
+    //     )
+    //     .expect("config parse");
 
-        let mut options = SolverOptions::default();
-        let _ = SolverOptions::apply_args(&mut options, config_args).expect("config apply");
-        let _ =
-            SolverOptions::apply_args(&mut options, ["--max-chunk-size=99", "--log-level=debug"])
-                .expect("cli apply");
+    //     let mut options = SolverOptions::default();
+    //     let _ = SolverOptions::apply_args(&mut options, config_args).expect("config apply");
+    //     let _ =
+    //         SolverOptions::apply_args(&mut options, ["--max-chunk-size=99", "--log-level=debug"])
+    //             .expect("cli apply");
 
-        assert_eq!(options.max_chunk_size, 99);
-        assert_eq!(options.log_level, LogLevel::Debug);
-    }
-
+    //     assert_eq!(options.max_chunk_size, 99);
+    //     assert_eq!(options.log_level, LogLevel::Debug);
+    // }
     #[test]
     fn parse_from_iter_accepts_no_log_timestamp_flag() {
         let (options, _) =
@@ -642,6 +662,28 @@ mod tests {
     #[test]
     fn parse_from_iter_rejects_no_cleanup_with_value() {
         let err = SolverOptions::parse_from_iter(["--no-cleanup=true"])
+            .expect_err("expected flag value rejection");
+        assert!(err.to_string().contains("does not take a value"));
+    }
+
+    #[test]
+    fn parse_from_iter_accepts_use_initial_tour_flag() {
+        let (options, _) =
+            SolverOptions::parse_from_iter(["--use-initial-tour"]).expect("parse options");
+        assert!(options.use_initial_tour);
+    }
+
+    #[test]
+    fn parse_from_iter_accepts_no_use_initial_tour_flag() {
+        let (options, _) =
+            SolverOptions::parse_from_iter(["--use-initial-tour", "--no-use-initial-tour"])
+                .expect("parse options");
+        assert!(!options.use_initial_tour);
+    }
+
+    #[test]
+    fn parse_from_iter_rejects_no_use_initial_tour_with_value() {
+        let err = SolverOptions::parse_from_iter(["--no-use-initial-tour=true"])
             .expect_err("expected flag value rejection");
         assert!(err.to_string().contains("does not take a value"));
     }

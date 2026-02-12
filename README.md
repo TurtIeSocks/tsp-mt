@@ -189,6 +189,8 @@ Both `--flag value` and `--flag=value` work.
 | `--outlier-threshold <f64>`           | float               |                   `10.0` | Distance threshold (meters) for counting spike/outlier jumps in route metrics |
 | `--cleanup[=<bool>]`                  | bool (optional val) |                   `true` | If provided without value, sets to `true`                                     |
 | `--no-cleanup`                        | flag                |                    `n/a` | Forces `cleanup=false`                                                        |
+| `--use-initial-tour[=<bool>]`         | bool (optional val) |                  `false` | Build an `INITIAL_TOUR_FILE` from input order and include it in each `.par`   |
+| `--no-use-initial-tour`               | flag                |                    `n/a` | Forces `use_initial_tour=false`                                               |
 | `--log-level <value>`                 | enum                |                   `warn` | One of: `error`, `warn`, `warning`, `info`, `debug`, `trace`, `off`           |
 | `--log-format <value>`                | enum                |                `compact` | One of: `compact`, `pretty`                                                   |
 | `--log-timestamp[=<bool>]`            | bool (optional val) |                   `true` | If provided without value, sets to `true`                                     |
@@ -196,7 +198,8 @@ Both `--flag value` and `--flag=value` work.
 | `--log-output <path>`                 | path                |                 `stderr` | Write logs/metrics to this file instead of stderr                             |
 | `--help`, `-h`                        | flag                |                    `n/a` | Prints usage and exits                                                        |
 
-Accepted boolean values for `--log-timestamp=<bool>` and `--cleanup=<bool>`:  
+Accepted boolean values for `--log-timestamp=<bool>`, `--cleanup=<bool>`, and
+`--use-initial-tour=<bool>`:  
 `1/0`, `true/false`, `yes/no`, `on/off` (common case variants supported).
 
 ## Common Errors

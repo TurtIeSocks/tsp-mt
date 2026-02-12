@@ -1,10 +1,11 @@
-use std::{path::Path, thread, time::Instant};
+use std::{fs, path::Path, thread, time::Instant};
 
 use lkh::{
     LkhError, LkhResult,
     parameters::{CandidateLimit, LkhParameters},
     problem::{EdgeWeightType, NodeCoord, TsplibProblem, TsplibProblemType},
     solver::LkhSolver,
+    tour::{TsplibTour, TsplibTourType},
 };
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -40,6 +41,7 @@ const STITCH_NON_NEIGHBOR_BRIDGE_PENALTY: f64 = 350.0;
 const STITCH_NON_NEIGHBOR_SELECTION_PENALTY_MULTIPLIER: f64 = 2.5;
 const STITCH_LONG_EDGE_BOUNDARY_MULTIPLIER: f64 = 2.0;
 const STITCH_LONG_EDGE_BOUNDARY_LIMIT: usize = 16;
+const INITIAL_TOUR_FILE_NAME: &str = "initial.tour";
 
 const ERR_INVALID_POINT: &str = "Input contains invalid lat/lng values";
 const ERR_INVALID_PROJECTION_RADIUS: &str = "projection_radius must be > 0";
@@ -83,6 +85,32 @@ pub(super) fn seeded_params(
         .with_seed(seed)
         .with_time_limit(time_limit)
         .with_trace_level(trace_level)
+}
+
+pub(super) fn maybe_attach_initial_tour_file(
+    params: &mut LkhParameters,
+    problem_file: &Path,
+    node_count: usize,
+    enable: bool,
+) -> LkhResult<()> {
+    if !enable {
+        return Ok(());
+    }
+    let parent = problem_file.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+    let path = parent.join(INITIAL_TOUR_FILE_NAME);
+    write_initial_tour_file(&path, node_count)?;
+    params.initial_tour_file = Some(path);
+    Ok(())
+}
+
+fn write_initial_tour_file(path: &Path, node_count: usize) -> LkhResult<()> {
+    let mut tour = TsplibTour::new();
+    tour.tour_type = Some(TsplibTourType::Tour);
+    tour.dimension = Some(node_count);
+    tour.tour_section = (1..=node_count).collect();
+    tour.emit_eof = true;
+    tour.write_to_file(path)
 }
 
 pub(super) fn available_seed_runs() -> usize {
@@ -186,24 +214,30 @@ pub(super) fn solve_chunk_indices(
     projected_points: &[LKHNode],
     work_dir: &Path,
     lkh_exe: &Path,
+    use_initial_tour: bool,
 ) -> LkhResult<Vec<usize>> {
     if idxs.len() < MIN_CYCLE_POINTS {
         return Ok(idxs.to_vec());
     }
 
     let chunk_points: Vec<LKHNode> = idxs.iter().map(|&idx| projected_points[idx]).collect();
-    let solver = LkhSolver::new(
-        build_problem(&chunk_points),
-        seeded_params(
-            &work_dir
-                .join(format!("chunk_{chunk_id}"))
-                .join("problem.tsp"),
-            DEFAULT_BASE_SEED,
-            scaled_max_trials(chunk_points.len()),
-            scaled_time_limit_seconds(chunk_points.len()),
-            MULTI_SEED_TRACE_LEVEL,
-        ),
+    let problem_file = work_dir
+        .join(format!("chunk_{chunk_id}"))
+        .join("problem.tsp");
+    let mut params = seeded_params(
+        &problem_file,
+        DEFAULT_BASE_SEED,
+        scaled_max_trials(chunk_points.len()),
+        scaled_time_limit_seconds(chunk_points.len()),
+        MULTI_SEED_TRACE_LEVEL,
+    );
+    maybe_attach_initial_tour_file(
+        &mut params,
+        &problem_file,
+        chunk_points.len(),
+        use_initial_tour,
     )?;
+    let solver = LkhSolver::new(build_problem(&chunk_points), params)?;
 
     let now = Instant::now();
     let tour = solver.run_with_exe(lkh_exe)?;
