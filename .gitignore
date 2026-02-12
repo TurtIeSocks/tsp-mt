@@ -11,3 +11,5 @@ target/
 # Dev
 /old
 /.temp
+/logs
+/results
