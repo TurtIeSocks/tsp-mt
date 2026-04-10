@@ -9,7 +9,7 @@ members = [
 
 [package]
 name        = "tsp-mt"
-version     = "0.1.0"
+version     = "0.1.1"
 edition     = "2024"
 description = "Multi-threaded TSP solver for lat/lng coordinates using LKH and H3 chunking"
 license     = "Apache-2.0"

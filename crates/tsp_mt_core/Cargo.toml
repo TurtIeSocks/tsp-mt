@@ -1,6 +1,6 @@
 [package]
 name        = "tsp_mt_core"
-version     = "0.1.0"
+version     = "0.1.1"
 edition     = "2024"
 description = "Core solver library for tsp-mt"
 license     = "Apache-2.0"
