@@ -20,6 +20,10 @@ use crate::{
 pub struct Solver {
     problem: Problem,
     params: Params,
+    /// Pre-built candidate set. When `Some`, skips the build step in
+    /// `solve()` — the caller has supplied (or sliced from a global
+    /// set) a ready-to-use one. Length must equal `problem.n()`.
+    candidates: Option<CandidateSet>,
 }
 
 /// Result of a solve: tour as a 0-based node permutation plus its
@@ -32,7 +36,28 @@ pub struct SolveOutcome {
 
 impl Solver {
     pub fn new(problem: Problem, params: Params) -> Self {
-        Self { problem, params }
+        Self {
+            problem,
+            params,
+            candidates: None,
+        }
+    }
+
+    /// Construct a solver with a caller-supplied candidate set. The
+    /// candidates must have been built (or sliced) for exactly the
+    /// node-id space of `problem` — `candidates.n() == problem.n()`.
+    /// Skips the in-solver `build_nn` / `build_alpha` call entirely.
+    pub fn new_with_candidates(
+        problem: Problem,
+        params: Params,
+        candidates: CandidateSet,
+    ) -> Self {
+        debug_assert_eq!(candidates.n(), problem.n());
+        Self {
+            problem,
+            params,
+            candidates: Some(candidates),
+        }
     }
 
     pub fn problem(&self) -> &Problem {
@@ -55,10 +80,14 @@ impl Solver {
         // subgradient ascent is overhead; above ~1200 nodes the O(n²)
         // 1-tree rebuild per iteration starts to dominate the search
         // budget — for n=5000 the 50-iter ascent eats >2s on its own.
-        // Use plain NN candidates outside the window.
+        // Use plain NN candidates outside the window. Skip entirely
+        // when the caller supplied a pre-built candidate set (e.g.
+        // sliced from a globally-shared one).
         let cand_start = Instant::now();
         let n = self.problem.n();
-        let candidates = if (256..=1200).contains(&n) {
+        let candidates = if let Some(precomputed) = self.candidates.clone() {
+            precomputed
+        } else if (256..=1200).contains(&n) {
             let pi = compute_pi(&self.problem);
             CandidateSet::build_alpha(&self.problem, &pi, max_candidates)
         } else {

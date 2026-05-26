@@ -1,6 +1,8 @@
 use std::{thread, time::Duration, time::Instant};
 
-use lin_kernighan::{Params as LkParams, Problem as LkProblem, Solver as LkSolver, coord::Point2D};
+use lin_kernighan::{
+    CandidateSet, Params as LkParams, Problem as LkProblem, Solver as LkSolver, coord::Point2D,
+};
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 use crate::{Error, LKHNode, Result, SolverInput, SolverOptions, h3_chunking, stitching};
@@ -183,6 +185,7 @@ pub(super) fn solve_chunk_indices(
     idxs: &[usize],
     projected_points: &[LKHNode],
     use_initial_tour: bool,
+    global_candidates: Option<&CandidateSet>,
 ) -> Result<Vec<usize>> {
     if idxs.len() < MIN_CYCLE_POINTS {
         return Ok(idxs.to_vec());
@@ -199,7 +202,23 @@ pub(super) fn solve_chunk_indices(
     let problem = build_problem(&chunk_points)?;
 
     let now = Instant::now();
-    let outcome = LkSolver::new(problem, params).solve()?;
+    // Use the shared NN candidates outside the ALPHA sweet-spot
+    // (256..=1200). Inside it, let the solver build per-chunk ALPHA
+    // candidates from scratch — the Pi-adjusted ranking on small
+    // dense subgraphs (typical of urban delivery chunks) measurably
+    // outperforms the same-size NN slice.
+    let chunk_n = chunk_points.len();
+    let outcome = if let Some(global) = global_candidates {
+        if (256..=1200).contains(&chunk_n) {
+            LkSolver::new(problem, params).solve()?
+        } else {
+            let local_to_global: Vec<u32> = idxs.iter().map(|&i| i as u32).collect();
+            let local_candidates = CandidateSet::subset(global, &local_to_global);
+            LkSolver::new_with_candidates(problem, params, local_candidates).solve()?
+        }
+    } else {
+        LkSolver::new(problem, params).solve()?
+    };
     log::info!(
         "chunk: done id={chunk_id} n={} secs={:.2}",
         idxs.len(),
@@ -207,6 +226,42 @@ pub(super) fn solve_chunk_indices(
     );
 
     Ok(outcome.tour.into_iter().map(|local_idx| idxs[local_idx]).collect())
+}
+
+/// Build a single global NN candidate set over all projected points,
+/// suitable for slicing per chunk via `CandidateSet::subset`. The
+/// global build runs the k-d tree symmetrisation work *once* instead
+/// of N-chunks times, which matters as soon as the chunk count rises
+/// past a few dozen.
+pub(super) fn build_global_candidates(
+    projected_points: &[LKHNode],
+    max_candidates: usize,
+) -> Result<CandidateSet> {
+    let coords: Vec<Point2D> = projected_points
+        .iter()
+        .map(|n| Point2D::new(
+            (n.y * ROUNDER_FACTOR).round(),
+            (n.x * ROUNDER_FACTOR).round(),
+        ))
+        .collect();
+    let problem = LkProblem::new(coords).map_err(Error::from)?;
+    Ok(CandidateSet::build_nn(&problem, max_candidates))
+}
+
+pub(super) const SHARED_MAX_CANDIDATES: usize = DEFAULT_MAX_CANDIDATES;
+
+/// Floor for the post-stitch LK refinement deadline. The
+/// `scaled_time_limit_seconds(n)` formula gives 1s minimum for small
+/// inputs, but the full-tour LK refinement benefits from a slightly
+/// longer budget — most useful gains here come from cross-seam moves
+/// that need a couple of full sweeps to surface.
+pub(super) const MIN_REFINE_TIME_LIMIT_SECONDS: usize = 2;
+
+pub(super) fn lk_params_with_initial_tour(
+    params: LkParams,
+    tour: Vec<usize>,
+) -> LkParams {
+    params.with_initial_tour(tour)
 }
 
 pub(super) fn build_node_to_chunk_map(

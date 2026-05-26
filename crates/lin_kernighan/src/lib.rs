@@ -20,6 +20,7 @@ pub mod problem;
 pub mod solver;
 pub mod tour;
 
+pub use candidate::CandidateSet;
 pub use coord::Point2D;
 pub use error::{Error, Result};
 pub use params::Params;

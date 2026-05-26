@@ -151,6 +151,47 @@ impl CandidateSet {
         Self { candidates }
     }
 
+    /// Restrict a globally-built candidate set to a chunk identified by
+    /// `local_to_global` (length = chunk size, mapping chunk-local node
+    /// index → original global node id). For each local node we look up
+    /// its global candidates, drop any that aren't in the chunk, and
+    /// rewrite the remaining target ids to chunk-local indices.
+    ///
+    /// Useful when the same input is solved many times across
+    /// overlapping subsets (chunked TSP, online repair) — building the
+    /// k-d tree + symmetrised NN list once on the global node set
+    /// amortises the work across every chunk.
+    pub fn subset(global: &CandidateSet, local_to_global: &[u32]) -> Self {
+        let n_local = local_to_global.len();
+        // Reverse map: global_id → local_id. Sentinel u32::MAX = not in chunk.
+        let global_n = global.n();
+        let mut global_to_local: Vec<u32> = vec![u32::MAX; global_n];
+        for (local_id, &global_id) in local_to_global.iter().enumerate() {
+            global_to_local[global_id as usize] = local_id as u32;
+        }
+
+        let mut candidates: Vec<Vec<Candidate>> = Vec::with_capacity(n_local);
+        for &global_id in local_to_global {
+            let entry: Vec<Candidate> = global
+                .of(global_id)
+                .iter()
+                .filter_map(|c| {
+                    let local_to = global_to_local[c.to as usize];
+                    if local_to == u32::MAX {
+                        None
+                    } else {
+                        Some(Candidate {
+                            to: local_to,
+                            cost: c.cost,
+                        })
+                    }
+                })
+                .collect();
+            candidates.push(entry);
+        }
+        Self { candidates }
+    }
+
     #[inline]
     pub fn of(&self, node: u32) -> &[Candidate] {
         &self.candidates[node as usize]
@@ -193,5 +234,27 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn subset_remaps_ids_and_drops_outside_chunk() {
+        let p = problem(&[
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (2.0, 0.0),
+            (10.0, 0.0),
+            (11.0, 0.0),
+        ]);
+        let global = CandidateSet::build_nn(&p, 4);
+        // Chunk = global nodes [0, 1, 2], rewritten as local [0, 1, 2].
+        let local = CandidateSet::subset(&global, &[0u32, 1, 2]);
+        for i in 0..3u32 {
+            for c in local.of(i) {
+                assert!(c.to < 3, "subset emitted out-of-range local id {}", c.to);
+            }
+        }
+        // Node 0's global candidates include node 3 (cost 10) and node 4
+        // (cost 11); both must be dropped in the subset.
+        assert!(local.of(0).iter().all(|c| c.to < 3));
     }
 }
