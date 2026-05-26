@@ -51,14 +51,12 @@ impl Solver {
                 max_candidates
             );
         }
-        // NN candidates are the default — empirically the Pi-adjusted
-        // ALPHA candidates re-rank the top-K nearly identically on
-        // dense Euclidean instances at this scale, and the subgradient
-        // ascent is non-trivial overhead. ALPHA is available via
-        // `CandidateSet::build_alpha` if/when an instance class shows a
-        // clear gap (clustered, hub-and-spoke, or asymmetric layouts).
-        let _ = compute_pi; // keep the symbol live for future selection.
-        let candidates = CandidateSet::build_nn(&self.problem, max_candidates);
+        let candidates = if self.problem.n() >= 256 {
+            let pi = compute_pi(&self.problem);
+            CandidateSet::build_alpha(&self.problem, &pi, max_candidates)
+        } else {
+            CandidateSet::build_nn(&self.problem, max_candidates)
+        };
 
         let mut best_tour = match &self.params.initial_tour {
             Some(order) => from_initial(order, &self.problem)?,

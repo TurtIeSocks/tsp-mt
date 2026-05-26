@@ -6,6 +6,7 @@
 //! of LKH-quality tours for the chunk sizes (≤ ~5000 nodes) tsp_mt_core
 //! solves.
 
+pub(crate) mod four_opt;
 pub(crate) mod or_opt;
 pub(crate) mod three_opt;
 pub(crate) mod two_opt;
@@ -41,6 +42,7 @@ pub fn improve(
     let mut two_opt_bits = vec![false; n];
     let mut or_opt_bits = vec![false; n];
     let mut three_opt_bits = vec![false; n];
+    let mut four_opt_bits = vec![false; n];
 
     let baseline_len = tour.length(problem).max(1);
     let plateau_threshold = (((baseline_len as f64) * PLATEAU_GAIN_RATIO) as i64).max(1);
@@ -81,12 +83,18 @@ pub fn improve(
                     or_opt::sweep(problem, candidates, tour, &mut or_opt_bits, deadline);
                 let three_gain =
                     three_opt::sweep(problem, candidates, tour, &mut three_opt_bits, deadline);
-                let combined = or_gain + three_gain;
+                let four_gain = if params.move_type >= 4 && or_gain + three_gain == 0 {
+                    for bit in four_opt_bits.iter_mut() {
+                        *bit = false;
+                    }
+                    four_opt::sweep(problem, candidates, tour, &mut four_opt_bits, deadline)
+                } else {
+                    0
+                };
+                let combined = or_gain + three_gain + four_gain;
                 if combined == 0 || combined < plateau_threshold {
                     break;
                 }
-                // Either escape move made progress — let 2-opt re-scan
-                // the touched neighbourhood next iteration.
                 for bit in two_opt_bits.iter_mut() {
                     *bit = false;
                 }
