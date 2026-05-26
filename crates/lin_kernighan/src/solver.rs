@@ -51,12 +51,25 @@ impl Solver {
                 max_candidates
             );
         }
-        let candidates = if self.problem.n() >= 256 {
+        // ALPHA only for the sweet-spot range. Below 256 nodes the
+        // subgradient ascent is overhead; above ~1200 nodes the O(n²)
+        // 1-tree rebuild per iteration starts to dominate the search
+        // budget — for n=5000 the 50-iter ascent eats >2s on its own.
+        // Use plain NN candidates outside the window.
+        let cand_start = Instant::now();
+        let n = self.problem.n();
+        let candidates = if (256..=1200).contains(&n) {
             let pi = compute_pi(&self.problem);
             CandidateSet::build_alpha(&self.problem, &pi, max_candidates)
         } else {
             CandidateSet::build_nn(&self.problem, max_candidates)
         };
+        if self.params.trace_level >= 1 {
+            log::info!(
+                "lin_kernighan: candidate set built in {:.3}s (n={n})",
+                cand_start.elapsed().as_secs_f64()
+            );
+        }
 
         let mut best_tour = match &self.params.initial_tour {
             Some(order) => from_initial(order, &self.problem)?,
@@ -81,11 +94,17 @@ impl Solver {
 
         let mut rng = ChaCha8Rng::seed_from_u64(self.params.seed.wrapping_add(0xA5A5_A5A5));
         let mut no_improvement = 0usize;
+        // Scale stagnation tolerance with problem size: tiny chunks
+        // exhaust the search space quickly, while large chunks need
+        // more kicks before declaring convergence. Hard upper bound
+        // from params.max_no_improvement keeps the budget bounded
+        // for pathological inputs.
+        let scaled_no_improvement = (self.problem.n() * 5).max(200).min(self.params.max_no_improvement);
         for trial in 2..=self.params.max_trials {
             if Instant::now() >= deadline {
                 break;
             }
-            if no_improvement >= self.params.max_no_improvement {
+            if no_improvement >= scaled_no_improvement {
                 if self.params.trace_level >= 1 {
                     log::info!(
                         "lin_kernighan: stagnation early-exit after trial={} (no_improve={}, best={best_len}, elapsed={:.2}s)",

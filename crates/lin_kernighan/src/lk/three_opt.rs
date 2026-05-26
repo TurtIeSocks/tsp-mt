@@ -113,7 +113,13 @@ fn try_at_side(
     let d_t1_t2 = euc_2d(c_t1, c_t2);
 
     let mut best: Option<(i64, [u32; 6], Case)> = None;
-    for cand_t3 in candidates.of(t2) {
+    // Cap breadth on the inner candidate loops to keep the O(k²) ×
+    // 2 X4-choices × 2 case search bounded. Top-k candidates by raw
+    // cost capture the vast majority of useful 3-opt moves; further
+    // candidates are increasingly unlikely to satisfy the gain
+    // criterion at depth 3.
+    const MAX_BREADTH: usize = 12;
+    for cand_t3 in candidates.of(t2).iter().take(MAX_BREADTH) {
         let t3 = cand_t3.to;
         if t3 == t1 || t3 == t2 {
             continue;
@@ -147,7 +153,7 @@ fn try_at_side(
             let d_t3_t4 = euc_2d(coords[t3 as usize], coords[t4 as usize]);
             let g2 = g1 + d_t3_t4;
 
-            for cand_t5 in candidates.of(t4) {
+            for cand_t5 in candidates.of(t4).iter().take(MAX_BREADTH) {
                 let t5 = cand_t5.to;
                 if t5 == t1 || t5 == t2 || t5 == t3 || t5 == t4 {
                     continue;
@@ -239,44 +245,56 @@ fn between(tour: &Tour, from: u32, mid: u32, to: u32, forward: bool) -> bool {
 
 fn apply_case(tour: &mut Tour, nodes: [u32; 6], case: Case, forward: bool) -> bool {
     let n = tour.n();
-    // Materialise the tour in the chosen direction so the case-specific
-    // slice arithmetic can assume "forward = follow indices ascending"
-    // unconditionally. We then rotate so `t1` sits at index 0.
-    let mut order: Vec<u32> = if forward {
-        tour.as_slice().to_vec()
-    } else {
-        let mut v = tour.as_slice().to_vec();
-        v.reverse();
-        v
-    };
-
     let [t1, t2, t3, t4, t5, t6] = nodes;
-    let position_of = |order: &[u32], node: u32| -> usize {
-        order.iter().position(|&x| x == node).expect("node in tour")
+
+    // Compute all positions in the *logical* frame (rotated so t1 → 0,
+    // optionally reversed for backward) via O(1) `tour.position_of`
+    // lookups + modular arithmetic. The earlier implementation did 5
+    // linear `iter().position()` scans for ~5n work at every apply;
+    // that adds up to most of the per-trial cost on n≥3k inputs.
+    let to_logical = |node: u32| -> usize {
+        let p = tour.position_of(node);
+        if forward {
+            let p1_raw = tour.position_of(t1);
+            (p + n - p1_raw) % n
+        } else {
+            // Backward = reverse-then-rotate. After reverse, the node
+            // originally at position p sits at (n - 1 - p); then
+            // rotate by t1's reversed-frame position.
+            let p1_rev = n - 1 - tour.position_of(t1);
+            let p_rev = n - 1 - p;
+            (p_rev + n - p1_rev) % n
+        }
     };
-    let p1 = position_of(&order, t1);
-    order.rotate_left(p1);
-    // After the rotate, t1 is at index 0 and the tour is read
-    // left-to-right in the chosen direction.
 
-    let p2 = 1usize;
-    let p_t3 = position_of(&order, t3);
-    let p_t4 = position_of(&order, t4);
-    let p_t5 = position_of(&order, t5);
-    let p_t6 = position_of(&order, t6);
-
-    // Sanity: t2 must always be at index 1 (it's the successor of t1
-    // in the rotation direction). If not, something invalidated our
-    // search assumptions — bail.
-    if order[p2] != t2 {
+    let p2 = to_logical(t2);
+    let p_t3 = to_logical(t3);
+    let p_t4 = to_logical(t4);
+    let p_t5 = to_logical(t5);
+    let p_t6 = to_logical(t6);
+    if p2 != 1 {
         return false;
     }
 
+    // Logical-frame accessor: given a logical index, return the node
+    // that sits there in the (rotated, possibly reversed) view of the
+    // tour. Lets the case-specific layout code read segments without
+    // ever materialising a rotated `Vec<u32>`.
+    let p1_raw = tour.position_of(t1);
+    let get_logical = |i: usize| -> u32 {
+        if forward {
+            tour.node_at((i + p1_raw) % n)
+        } else {
+            let p_rev = (n - 1 - p1_raw + n - i) % n; // inverse of to_logical for backward
+            tour.node_at(p_rev)
+        }
+    };
+
     let new_order = match case {
-        Case::One => apply_case_one(&order, p2, p_t3, p_t4, p_t5, p_t6, n),
-        Case::Two => apply_case_two(&order, p2, p_t3, p_t4, p_t5, p_t6, n),
-        Case::Five => apply_case_five(&order, p2, p_t3, p_t4, p_t5, p_t6, n),
-        Case::Six => apply_case_six(&order, p2, p_t3, p_t4, p_t5, p_t6, n),
+        Case::One => build_case_one(&get_logical, p2, p_t3, p_t4, p_t5, p_t6, n),
+        Case::Two => build_case_two(&get_logical, p2, p_t3, p_t4, p_t5, p_t6, n),
+        Case::Five => build_case_five(&get_logical, p2, p_t3, p_t4, p_t5, p_t6, n),
+        Case::Six => build_case_six(&get_logical, p2, p_t3, p_t4, p_t5, p_t6, n),
     };
     let Some(new_order) = new_order else {
         return false;
@@ -284,10 +302,6 @@ fn apply_case(tour: &mut Tour, nodes: [u32; 6], case: Case, forward: bool) -> bo
     if new_order.len() != n {
         return false;
     }
-    // Validate Hamiltonian-ness — the slice arithmetic per case is
-    // fiddly, and a miscount silently produces a permutation with
-    // duplicates / missing nodes that Tour::from_order accepts but
-    // later sweeps compute garbage from. Cheap O(n) sanity guard.
     let mut seen = vec![false; n];
     for &node in &new_order {
         let id = node as usize;
@@ -300,10 +314,31 @@ fn apply_case(tour: &mut Tour, nodes: [u32; 6], case: Case, forward: bool) -> bo
     true
 }
 
+/// Helper: copy logical-frame range `[lo, hi]` (inclusive) into the
+/// output. Optionally reversed.
+fn push_range<F: Fn(usize) -> u32>(out: &mut Vec<u32>, get: &F, lo: usize, hi: usize, reversed: bool) {
+    if reversed {
+        for i in (lo..=hi).rev() {
+            out.push(get(i));
+        }
+    } else {
+        for i in lo..=hi {
+            out.push(get(i));
+        }
+    }
+}
+
+/// Helper: copy logical-frame range `[lo, n-1]` into the output.
+fn push_tail<F: Fn(usize) -> u32>(out: &mut Vec<u32>, get: &F, lo: usize, n: usize) {
+    for i in lo..n {
+        out.push(get(i));
+    }
+}
+
 /// Case 1: X4=1 (t4=PRED(t3)), t6=SUC(t5), t5 between t2 and t4.
 /// Layout: `[t1] + tour[p6..=p4] + reverse(tour[p2..=p5]) + tour[p3..]`.
-fn apply_case_one(
-    order: &[u32],
+fn build_case_one<F: Fn(usize) -> u32>(
+    get: &F,
     p2: usize,
     p_t3: usize,
     p_t4: usize,
@@ -315,18 +350,16 @@ fn apply_case_one(
         return None;
     }
     let mut out = Vec::with_capacity(n);
-    out.push(order[0]);
-    out.extend_from_slice(&order[p_t6..=p_t4]);
-    out.extend(order[p2..=p_t5].iter().rev().copied());
-    out.extend_from_slice(&order[p_t3..]);
+    out.push(get(0));
+    push_range(&mut out, get, p_t6, p_t4, false);
+    push_range(&mut out, get, p2, p_t5, true);
+    push_tail(&mut out, get, p_t3, n);
     Some(out)
 }
 
 /// Case 2: X4=1 (t4=PRED(t3)), t6=PRED(t5), t5 NOT between t2 and t4.
-/// Tour shape: `t1, t2, ..., t4, t3, ..., t6, t5, ..., t_last, [t1]`.
-/// Layout: `[t1] + reverse(tour[p3..=p6]) + tour[p2..=p4] + tour[p5..]`.
-fn apply_case_two(
-    order: &[u32],
+fn build_case_two<F: Fn(usize) -> u32>(
+    get: &F,
     p2: usize,
     p_t3: usize,
     p_t4: usize,
@@ -338,18 +371,16 @@ fn apply_case_two(
         return None;
     }
     let mut out = Vec::with_capacity(n);
-    out.push(order[0]);
-    out.extend(order[p_t3..=p_t6].iter().rev().copied());
-    out.extend_from_slice(&order[p2..=p_t4]);
-    out.extend_from_slice(&order[p_t5..]);
+    out.push(get(0));
+    push_range(&mut out, get, p_t3, p_t6, true);
+    push_range(&mut out, get, p2, p_t4, false);
+    push_tail(&mut out, get, p_t5, n);
     Some(out)
 }
 
 /// Case 5: X4=2 (t4=SUC(t3)), t6=SUC(t5), t5 between t2 and t3.
-/// Tour shape: `t1, t2, ..., t5, t6, ..., t3, t4, ..., t_last, [t1]`.
-/// Layout: `[t1] + tour[p6..=p3] + tour[p2..=p5] + tour[p4..]`.
-fn apply_case_five(
-    order: &[u32],
+fn build_case_five<F: Fn(usize) -> u32>(
+    get: &F,
     p2: usize,
     p_t3: usize,
     p_t4: usize,
@@ -361,18 +392,16 @@ fn apply_case_five(
         return None;
     }
     let mut out = Vec::with_capacity(n);
-    out.push(order[0]);
-    out.extend_from_slice(&order[p_t6..=p_t3]);
-    out.extend_from_slice(&order[p2..=p_t5]);
-    out.extend_from_slice(&order[p_t4..]);
+    out.push(get(0));
+    push_range(&mut out, get, p_t6, p_t3, false);
+    push_range(&mut out, get, p2, p_t5, false);
+    push_tail(&mut out, get, p_t4, n);
     Some(out)
 }
 
 /// Case 6: X4=2 (t4=SUC(t3)), t6=PRED(t5), t5 between t2 and t3.
-/// Tour shape: `t1, t2, ..., t6, t5, ..., t3, t4, ..., t_last, [t1]`.
-/// Layout: `[t1] + reverse(tour[p2..=p6]) + reverse(tour[p5..=p3]) + tour[p4..]`.
-fn apply_case_six(
-    order: &[u32],
+fn build_case_six<F: Fn(usize) -> u32>(
+    get: &F,
     p2: usize,
     p_t3: usize,
     p_t4: usize,
@@ -384,9 +413,9 @@ fn apply_case_six(
         return None;
     }
     let mut out = Vec::with_capacity(n);
-    out.push(order[0]);
-    out.extend(order[p2..=p_t6].iter().rev().copied());
-    out.extend(order[p_t5..=p_t3].iter().rev().copied());
-    out.extend_from_slice(&order[p_t4..]);
+    out.push(get(0));
+    push_range(&mut out, get, p2, p_t6, true);
+    push_range(&mut out, get, p_t5, p_t3, true);
+    push_tail(&mut out, get, p_t4, n);
     Some(out)
 }
