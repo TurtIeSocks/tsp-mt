@@ -155,12 +155,6 @@ fn double_bridge<R: Rng + RngExt>(tour: &mut Tour, rng: &mut R) {
     if n < 8 {
         return;
     }
-    // Three uniformly-random split points across the tour. The previous
-    // implementation confined each split to one quarter of the array
-    // (1+rand(n/4), p1+1+rand(n/4), p2+1+rand(n/4)) which left the last
-    // ~quarter untouched, biasing every kick toward the same region and
-    // reducing diversification across trials. Uniform split points
-    // produce balanced AB-CD-EF reshufflings across the whole cycle.
     let max_pos = (n as u64).saturating_sub(1);
     let mut splits: [usize; 3] = [
         1 + rng.random_range(0..max_pos) as usize,
@@ -169,19 +163,12 @@ fn double_bridge<R: Rng + RngExt>(tour: &mut Tour, rng: &mut R) {
     ];
     splits.sort();
     if splits[0] == splits[1] || splits[1] == splits[2] || splits[0] == splits[2] {
-        return; // degenerate kick, fall through (caller will pick another)
+        return;
     }
-    let p1 = splits[0];
-    let p2 = splits[1];
-    let p3 = splits[2];
-
-    let slice = tour.as_slice();
-    let mut new_order: Vec<u32> = Vec::with_capacity(n);
-    new_order.extend_from_slice(&slice[0..p1]);
-    new_order.extend_from_slice(&slice[p3..n]);
-    new_order.extend_from_slice(&slice[p2..p3]);
-    new_order.extend_from_slice(&slice[p1..p2]);
-    *tour = Tour::from_order(&new_order);
+    // In-place double-bridge via three slice reversals. Allocation-
+    // free; per-trial cost drops from "rebuild whole pos array" to
+    // O(p3 − p1) reverses + pos updates.
+    tour.double_bridge_in_place(splits[0], splits[1], splits[2]);
 }
 
 #[cfg(test)]

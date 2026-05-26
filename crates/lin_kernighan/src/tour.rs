@@ -64,6 +64,26 @@ impl Tour {
         self.tour[(p + n - 1) % n]
     }
 
+    /// Apply a double-bridge perturbation in place: given three split
+    /// positions `p1 < p2 < p3`, the tour `[A | B | C | D]` becomes
+    /// `[A | C | B | D]`. Implemented via three in-place reversals
+    /// (the "double reversal" identity for adjacent-block swap), no
+    /// allocations.
+    pub fn double_bridge_in_place(&mut self, p1: usize, p2: usize, p3: usize) {
+        let n = self.tour.len();
+        if !(p1 < p2 && p2 < p3 && p3 <= n) {
+            return;
+        }
+        // Three in-place reversals: reverse B, reverse C, then reverse
+        // the combined B'+C' span. Net effect: blocks B and C swap.
+        self.tour[p1..p2].reverse();
+        self.tour[p2..p3].reverse();
+        self.tour[p1..p3].reverse();
+        for i in p1..p3 {
+            self.pos[self.tour[i] as usize] = i as u32;
+        }
+    }
+
     /// Relocate the segment `tour[seg_start..seg_start+seg_len]` to
     /// the position immediately after `insert_after_pos`, optionally
     /// reversing it first. In-place: mutates the tour and pos arrays
