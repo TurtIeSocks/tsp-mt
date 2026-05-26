@@ -36,10 +36,6 @@ pub fn sweep(
 
     let mut idx: usize = 0;
     let mut visited = 0usize;
-    // Check the deadline lazily — calling `Instant::now()` per anchor
-    // tanks throughput on tight loops. Once per `DEADLINE_CHECK_STRIDE`
-    // is enough; the per-trial deadline is rarely tighter than a few
-    // milliseconds.
     const DEADLINE_CHECK_STRIDE: usize = 256;
     while visited < n {
         if visited % DEADLINE_CHECK_STRIDE == 0 && Instant::now() >= deadline {

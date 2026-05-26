@@ -23,7 +23,7 @@ const PLATEAU_GAIN_RATIO: f64 = 0.0005;
 /// convergence happens well under this number; the cap exists to keep
 /// the per-trial wall time bounded when a tour keeps finding chains of
 /// single-unit gains.
-const MAX_SWEEPS_PER_IMPROVE: usize = 64;
+const MAX_SWEEPS_PER_IMPROVE: usize = 128;
 
 /// Improve `tour` in place using 2-opt then Or-opt sweeps, repeating
 /// until no further improvement is found, the sweep gain drops below a

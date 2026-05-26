@@ -40,7 +40,7 @@ impl Default for Params {
             trace_level: 0,
             move_type: 3,
             initial_tour: None,
-            max_no_improvement: 500,
+            max_no_improvement: 3000,
         }
     }
 }
