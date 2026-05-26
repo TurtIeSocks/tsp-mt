@@ -137,9 +137,15 @@ fn apply_relocate(
     reversed: bool,
     n: usize,
 ) {
-    // Extract segment nodes, build a fresh order with the segment removed
-    // then re-inserted after `insert_after_pos`. O(n) per move — fine for
-    // the chunk sizes we target.
+    // Fast path: in-place `Tour::relocate_segment`. Handles the common
+    // case (no wrap-around) with zero allocations — just a slice
+    // rotate + pos update on the affected range. Or-opt fires hundreds
+    // of times per chunk; this is the single biggest amortized win.
+    if tour.relocate_segment(seg_start, seg_len, insert_after_pos, reversed) {
+        return;
+    }
+    // Slow path: rebuild the whole tour. Reached for wrap-around
+    // segments and insertion points that straddle position 0.
     let segment: Vec<u32> = (0..seg_len)
         .map(|k| tour.node_at((seg_start + k) % n))
         .collect();

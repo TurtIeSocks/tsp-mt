@@ -137,9 +137,16 @@ fn try_with_anchor(
             continue;
         }
         let pc = tour.position_of(c);
-        let d_ac = euc_2d(coords[a as usize], coords[c as usize]);
+        // d_ac (when iterating a's candidates) and d_bd (when iterating
+        // b's candidates) are already known as `cand.cost` — skip the
+        // redundant euc_2d recompute. The remaining two distances are
+        // genuinely fresh per pair.
+        let (d_ac, d_bd) = if iterate_a_candidates {
+            (cand.cost, euc_2d(coords[b as usize], coords[d as usize]))
+        } else {
+            (euc_2d(coords[a as usize], coords[c as usize]), cand.cost)
+        };
         let d_cd = euc_2d(coords[c as usize], coords[d as usize]);
-        let d_bd = euc_2d(coords[b as usize], coords[d as usize]);
         let gain = d_ab + d_cd - d_ac - d_bd;
         if gain <= 0 {
             continue;
