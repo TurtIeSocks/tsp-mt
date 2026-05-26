@@ -246,11 +246,13 @@ pub fn lkh_multi_parallel(input: SolverInput, options: SolverOptions) -> Result<
     let refine_time_limit = scaled_time_limit_seconds(projected_points.len())
         .max(MIN_REFINE_TIME_LIMIT_SECONDS as f64)
         .min(8.0);
-    // Refinement starts from a near-locally-optimal stitched tour.
-    // Fewer kicks needed than a from-scratch chunk solve, so cap
-    // `max_no_improvement` lower to exit faster once seam moves are
-    // exhausted. ~200 kicks of no improvement is plenty.
-    const REFINE_MAX_NO_IMPROVEMENT: usize = 200;
+    // Refinement starts from a near-locally-optimal stitched tour
+    // but still benefits significantly from kick-based diversification
+    // — many seam-induced local minima only get escaped via a
+    // double-bridge perturbation. Re-uses the chunk solver's trial
+    // loop with a tight `max_no_improvement` so we exit quickly once
+    // kicks stop paying off.
+    const REFINE_MAX_NO_IMPROVEMENT: usize = 500;
     let refine_params = seeded_params(
         DEFAULT_BASE_SEED,
         scaled_max_trials(projected_points.len()),

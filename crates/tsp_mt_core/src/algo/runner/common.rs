@@ -257,12 +257,6 @@ pub(super) const SHARED_MAX_CANDIDATES: usize = DEFAULT_MAX_CANDIDATES;
 /// that need a couple of full sweeps to surface.
 pub(super) const MIN_REFINE_TIME_LIMIT_SECONDS: usize = 2;
 
-pub(super) fn lk_params_with_initial_tour(
-    params: LkParams,
-    tour: Vec<usize>,
-) -> LkParams {
-    params.with_initial_tour(tour)
-}
 
 pub(super) fn build_node_to_chunk_map(
     node_count: usize,
