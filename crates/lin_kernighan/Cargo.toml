@@ -1,0 +1,15 @@
+[package]
+name        = "lin_kernighan"
+version     = "0.1.0"
+edition     = "2024"
+description = "Native Rust Lin-Kernighan symmetric Euclidean TSP solver (port of the LKH-3 algorithm subset used by tsp-mt)"
+license     = "Apache-2.0"
+keywords    = ["tsp", "routing", "lin-kernighan", "lkh"]
+categories  = ["algorithms"]
+
+[dependencies]
+kiddo     = "5.2.4"
+rand      = "0.10.0"
+rand_chacha = "0.10.0"
+thiserror = "2.0.18"
+log       = "0.4.29"

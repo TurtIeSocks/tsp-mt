@@ -2,16 +2,12 @@ use thiserror::Error as ThisError;
 
 #[derive(Debug, ThisError)]
 pub enum Error {
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-    #[error(transparent)]
-    LinKernighan(#[from] lin_kernighan::Error),
     #[error("invalid input: {0}")]
     InvalidInput(String),
     #[error("invalid data: {0}")]
     InvalidData(String),
-    #[error("{0}")]
-    Other(String),
+    #[error("solver: {0}")]
+    Solver(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -25,7 +21,7 @@ impl Error {
         Self::InvalidData(message.into())
     }
 
-    pub fn other(message: impl Into<String>) -> Self {
-        Self::Other(message.into())
+    pub fn solver(message: impl Into<String>) -> Self {
+        Self::Solver(message.into())
     }
 }

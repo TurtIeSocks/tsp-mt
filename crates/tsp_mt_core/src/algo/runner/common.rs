@@ -1,15 +1,9 @@
-use std::{fs, path::Path, thread, time::Instant};
+use std::{thread, time::Duration, time::Instant};
 
-use lkh::{
-    LkhError, LkhResult,
-    parameters::{CandidateLimit, LkhParameters},
-    problem::{EdgeWeightType, NodeCoord, TsplibProblem, TsplibProblemType},
-    solver::LkhSolver,
-    tour::{TsplibTour, TsplibTourType},
-};
+use lin_kernighan::{Params as LkParams, Problem as LkProblem, Solver as LkSolver, coord::Point2D};
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 
-use crate::{LKHNode, SolverInput, SolverOptions, h3_chunking, stitching};
+use crate::{Error, LKHNode, Result, SolverInput, SolverOptions, h3_chunking, stitching};
 
 pub(super) const MIN_CYCLE_POINTS: usize = 3;
 pub(super) const DEFAULT_BASE_SEED: u64 = 12_345;
@@ -19,7 +13,6 @@ pub(super) const MAX_CENTROIDS_WITH_TRIVIAL_ORDER: usize = 2;
 pub(super) const ERR_NO_RESULTS: &str = "No results";
 
 const DEFAULT_MAX_CANDIDATES: usize = 32;
-const SINGLE_RUNS: usize = 1;
 const MAX_TRIALS_MULTIPLIER: usize = 3;
 const MIN_MAX_TRIALS: usize = 1_000;
 const MAX_MAX_TRIALS: usize = 100_000;
@@ -41,7 +34,6 @@ const STITCH_NON_NEIGHBOR_BRIDGE_PENALTY: f64 = 350.0;
 const STITCH_NON_NEIGHBOR_SELECTION_PENALTY_MULTIPLIER: f64 = 2.5;
 const STITCH_LONG_EDGE_BOUNDARY_MULTIPLIER: f64 = 2.0;
 const STITCH_LONG_EDGE_BOUNDARY_LIMIT: usize = 16;
-const INITIAL_TOUR_FILE_NAME: &str = "initial.tour";
 
 const ERR_INVALID_POINT: &str = "Input contains invalid lat/lng values";
 const ERR_INVALID_PROJECTION_RADIUS: &str = "projection_radius must be > 0";
@@ -52,65 +44,43 @@ const ERR_INVALID_SPIKE_REPAIR_PASSES: &str =
     "spike_repair_passes must be > 0 when spike_repair_top_n > 0";
 const ERR_INVALID_OUTLIER_THRESHOLD: &str = "outlier_threshold must be > 0";
 
-pub(super) fn build_problem(points: &[LKHNode]) -> TsplibProblem {
-    TsplibProblem::new(TsplibProblemType::Tsp)
-        .with_node_coord_section(
-            points
-                .iter()
-                .enumerate()
-                .map(|(idx, n)| {
-                    NodeCoord::twod(
-                        idx + 1,
-                        (n.y * ROUNDER_FACTOR).round(),
-                        (n.x * ROUNDER_FACTOR).round(),
-                    )
-                })
-                .collect::<Vec<_>>(),
-        )
-        .with_dimension(points.len())
-        .with_edge_weight_type(EdgeWeightType::Euc2d)
+pub(super) fn build_problem(points: &[LKHNode]) -> Result<LkProblem> {
+    // Preserve the same integer-EUC_2D coordinate scaling LKH consumed
+    // (`(y*1000).round()` as X, `(x*1000).round()` as Y). Swapping the
+    // axes is harmless for symmetric Euclidean distance but kept for
+    // bit-level continuity with prior runs.
+    let coords: Vec<Point2D> = points
+        .iter()
+        .map(|n| {
+            Point2D::new(
+                (n.y * ROUNDER_FACTOR).round(),
+                (n.x * ROUNDER_FACTOR).round(),
+            )
+        })
+        .collect();
+    LkProblem::new(coords).map_err(Error::from)
 }
 
 pub(super) fn seeded_params(
-    problem_file: &Path,
     seed: u64,
     max_trials: usize,
-    time_limit: f64,
+    time_limit_seconds: f64,
     trace_level: usize,
-) -> LkhParameters {
-    LkhParameters::new(problem_file)
-        .with_max_candidates(CandidateLimit::new(DEFAULT_MAX_CANDIDATES, true))
+) -> LkParams {
+    LkParams::default()
+        .with_max_candidates(DEFAULT_MAX_CANDIDATES)
         .with_max_trials(max_trials)
-        .with_runs(SINGLE_RUNS)
         .with_seed(seed)
-        .with_time_limit(time_limit)
+        .with_time_limit(Duration::from_secs_f64(time_limit_seconds.max(0.0)))
         .with_trace_level(trace_level)
 }
 
-pub(super) fn maybe_attach_initial_tour_file(
-    params: &mut LkhParameters,
-    problem_file: &Path,
-    node_count: usize,
-    enable: bool,
-) -> LkhResult<()> {
+pub(super) fn maybe_attach_initial_tour(params: LkParams, node_count: usize, enable: bool) -> LkParams {
     if !enable {
-        return Ok(());
+        return params;
     }
-    let parent = problem_file.parent().unwrap_or_else(|| Path::new("."));
-    fs::create_dir_all(parent)?;
-    let path = parent.join(INITIAL_TOUR_FILE_NAME);
-    write_initial_tour_file(&path, node_count)?;
-    params.initial_tour_file = Some(path);
-    Ok(())
-}
-
-fn write_initial_tour_file(path: &Path, node_count: usize) -> LkhResult<()> {
-    let mut tour = TsplibTour::new();
-    tour.tour_type = Some(TsplibTourType::Tour);
-    tour.dimension = Some(node_count);
-    tour.tour_section = (1..=node_count).collect();
-    tour.emit_eof = true;
-    tour.write_to_file(path)
+    let identity: Vec<usize> = (0..node_count).collect();
+    params.with_initial_tour(identity)
 }
 
 pub(super) fn available_seed_runs() -> usize {
@@ -171,39 +141,39 @@ pub(super) fn cycle_length(points: &[LKHNode], tour: &[usize]) -> f64 {
         .sum()
 }
 
-pub(super) fn validate_min_cycle_points(input: &SolverInput) -> LkhResult<()> {
+pub(super) fn validate_min_cycle_points(input: &SolverInput) -> Result<()> {
     if input.points_len() < MIN_CYCLE_POINTS {
-        return Err(LkhError::invalid_input(format!(
+        return Err(Error::invalid_input(format!(
             "Need at least {MIN_CYCLE_POINTS} points for a cycle"
         )));
     }
     Ok(())
 }
 
-pub(super) fn validate_points(input: &SolverInput) -> LkhResult<()> {
+pub(super) fn validate_points(input: &SolverInput) -> Result<()> {
     if input.nodes.iter().any(|point| !point.is_valid()) {
-        return Err(LkhError::invalid_input(ERR_INVALID_POINT));
+        return Err(Error::invalid_input(ERR_INVALID_POINT));
     }
     Ok(())
 }
 
-pub(super) fn validate_projection_radius(options: &SolverOptions) -> LkhResult<()> {
+pub(super) fn validate_projection_radius(options: &SolverOptions) -> Result<()> {
     if options.projection_radius <= 0.0 {
-        return Err(LkhError::invalid_input(ERR_INVALID_PROJECTION_RADIUS));
+        return Err(Error::invalid_input(ERR_INVALID_PROJECTION_RADIUS));
     }
     Ok(())
 }
 
-pub(super) fn validate_chunk_size(options: &SolverOptions) -> LkhResult<()> {
+pub(super) fn validate_chunk_size(options: &SolverOptions) -> Result<()> {
     if options.max_chunk_size == 0 {
-        return Err(LkhError::invalid_input(ERR_INVALID_MAX_CHUNK_SIZE));
+        return Err(Error::invalid_input(ERR_INVALID_MAX_CHUNK_SIZE));
     }
     Ok(())
 }
 
-pub(super) fn validate_outlier_threshold(options: &SolverOptions) -> LkhResult<()> {
+pub(super) fn validate_outlier_threshold(options: &SolverOptions) -> Result<()> {
     if options.outlier_threshold <= 0.0 {
-        return Err(LkhError::invalid_input(ERR_INVALID_OUTLIER_THRESHOLD));
+        return Err(Error::invalid_input(ERR_INVALID_OUTLIER_THRESHOLD));
     }
     Ok(())
 }
@@ -212,46 +182,31 @@ pub(super) fn solve_chunk_indices(
     chunk_id: usize,
     idxs: &[usize],
     projected_points: &[LKHNode],
-    work_dir: &Path,
-    lkh_exe: &Path,
     use_initial_tour: bool,
-) -> LkhResult<Vec<usize>> {
+) -> Result<Vec<usize>> {
     if idxs.len() < MIN_CYCLE_POINTS {
         return Ok(idxs.to_vec());
     }
 
     let chunk_points: Vec<LKHNode> = idxs.iter().map(|&idx| projected_points[idx]).collect();
-    let problem_file = work_dir
-        .join(format!("chunk_{chunk_id}"))
-        .join("problem.tsp");
-    let mut params = seeded_params(
-        &problem_file,
+    let params = seeded_params(
         DEFAULT_BASE_SEED,
         scaled_max_trials(chunk_points.len()),
         scaled_time_limit_seconds(chunk_points.len()),
         MULTI_SEED_TRACE_LEVEL,
     );
-    maybe_attach_initial_tour_file(
-        &mut params,
-        &problem_file,
-        chunk_points.len(),
-        use_initial_tour,
-    )?;
-    let solver = LkhSolver::new(build_problem(&chunk_points), params)?;
+    let params = maybe_attach_initial_tour(params, chunk_points.len(), use_initial_tour);
+    let problem = build_problem(&chunk_points)?;
 
     let now = Instant::now();
-    let tour = solver.run_with_exe(lkh_exe)?;
+    let outcome = LkSolver::new(problem, params).solve()?;
     log::info!(
         "chunk: done id={chunk_id} n={} secs={:.2}",
         idxs.len(),
         now.elapsed().as_secs_f32()
     );
 
-    let local_order = tour.zero_based_tour()?;
-    Ok(local_order
-        .into_iter()
-        .map(|local_idx| idxs[local_idx])
-        .collect())
+    Ok(outcome.tour.into_iter().map(|local_idx| idxs[local_idx]).collect())
 }
 
 pub(super) fn build_node_to_chunk_map(
@@ -269,14 +224,12 @@ pub(super) fn build_node_to_chunk_map(
     node_to_chunk
 }
 
-pub(super) fn build_stitching_tuning(
-    options: &SolverOptions,
-) -> LkhResult<stitching::StitchingTuning> {
+pub(super) fn build_stitching_tuning(options: &SolverOptions) -> Result<stitching::StitchingTuning> {
     if options.spike_repair_top_n > 0 && options.spike_repair_window == 0 {
-        return Err(LkhError::invalid_input(ERR_INVALID_SPIKE_REPAIR_WINDOW));
+        return Err(Error::invalid_input(ERR_INVALID_SPIKE_REPAIR_WINDOW));
     }
     if options.spike_repair_top_n > 0 && options.spike_repair_passes == 0 {
-        return Err(LkhError::invalid_input(ERR_INVALID_SPIKE_REPAIR_PASSES));
+        return Err(Error::invalid_input(ERR_INVALID_SPIKE_REPAIR_PASSES));
     }
 
     Ok(stitching::StitchingTuning {

@@ -4,24 +4,14 @@ use std::{
     process,
 };
 
-#[cfg(feature = "fetch-lkh")]
-use lkh::embedded_lkh;
 use log::LevelFilter;
 use tsp_mt_derive::{CliOptions, CliValue, KvDisplay};
-// use walkdir::WalkDir;
 
 use crate::{Error, Result};
-
-// const CONFIG_FILE_NAME: &str = ".tsp-mt.config.toml";
-// const CONFIG_PATH_ENV: &str = "TSP_MT_CONFIG";
 
 /// Runtime options for LKH solving behavior.
 #[derive(Clone, Debug, CliOptions, KvDisplay)]
 pub struct SolverOptions {
-    /// Path to the LKH executable.
-    #[cli(long = "lkh-exe")]
-    #[kv(fmt = "path")]
-    pub lkh_exe: PathBuf,
     /// Working directory for temporary files and run artifacts.
     #[cli(long = "work-dir")]
     #[kv(fmt = "path")]
@@ -128,7 +118,6 @@ pub enum SolverMode {
 impl Default for SolverOptions {
     fn default() -> Self {
         Self {
-            lkh_exe: PathBuf::new(),
             work_dir: default_work_dir(),
             projection_radius: 70.0,
             max_chunk_size: 1_000,
@@ -157,27 +146,7 @@ impl Default for SolverOptions {
 impl SolverOptions {
     pub fn from_args() -> Result<Self> {
         let cli_args: Vec<String> = env::args().skip(1).collect();
-
-        #[cfg(not(feature = "fetch-lkh"))]
-        {
-            let (options, saw_lkh_exe) = Self::parse_with_config(cli_args)?;
-            if !saw_lkh_exe {
-                return Err(Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "`fetch-lkh feature is not enabled and the `--lkh-exe` arg was not provided",
-                )));
-            }
-            Ok(options)
-        }
-
-        #[cfg(feature = "fetch-lkh")]
-        {
-            let (mut options, saw_lkh_exe) = Self::parse_with_config(cli_args)?;
-            if !saw_lkh_exe {
-                options.lkh_exe = embedded_lkh::embedded_path()?;
-            }
-            Ok(options)
-        }
+        Self::parse_with_config(cli_args)
     }
 
     pub fn set_max_chunk_size(&mut self, n: usize) {
@@ -188,45 +157,34 @@ impl SolverOptions {
         }
     }
 
-    fn parse_with_config<I, S>(cli_args: I) -> Result<(Self, bool)>
+    fn parse_with_config<I, S>(cli_args: I) -> Result<Self>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
         let mut options = Self::default();
-        let mut saw_lkh_exe = false;
-
-        // if let Some(config_path) = find_config_file()? {
-        //     let config_args = Self::config_args_from_path(&config_path)?;
-        //     saw_lkh_exe |= Self::apply_args(&mut options, config_args)?;
-        // }
-
-        saw_lkh_exe |= Self::apply_args(&mut options, cli_args)?;
-
+        Self::apply_args(&mut options, cli_args)?;
         options.work_dir = normalize_path(options.work_dir)?;
-        options.lkh_exe = normalize_path(options.lkh_exe)?;
-        Ok((options, saw_lkh_exe))
+        Ok(options)
     }
 
     #[cfg(test)]
-    fn parse_from_iter<I, S>(args: I) -> Result<(Self, bool)>
+    fn parse_from_iter<I, S>(args: I) -> Result<Self>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
         let mut options = Self::default();
-        let saw_lkh_exe = Self::apply_args(&mut options, args)?;
+        Self::apply_args(&mut options, args)?;
         options.work_dir = normalize_path(options.work_dir)?;
-        options.lkh_exe = normalize_path(options.lkh_exe)?;
-        Ok((options, saw_lkh_exe))
+        Ok(options)
     }
 
-    fn apply_args<I, S>(options: &mut Self, args: I) -> Result<bool>
+    fn apply_args<I, S>(options: &mut Self, args: I) -> Result<()>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let mut saw_lkh_exe = false;
         let mut args = args
             .into_iter()
             .map(|arg| arg.as_ref().to_owned())
@@ -254,9 +212,6 @@ impl SolverOptions {
             let (name, value) = Self::split_arg(raw_name, &mut args);
 
             if options.apply_cli_option(&name, value.clone())? {
-                if name == "lkh-exe" {
-                    saw_lkh_exe = true;
-                }
                 continue;
             }
 
@@ -311,7 +266,7 @@ impl SolverOptions {
                 }
             }
         }
-        Ok(saw_lkh_exe)
+        Ok(())
     }
 
     // fn config_args_from_path(path: &Path) -> Result<Vec<String>> {
@@ -353,7 +308,6 @@ impl SolverOptions {
             "  tsp-mt [options] [--input points.txt]\n",
             "  tsp-mt [options] < points.txt\n\n",
             "Options:\n",
-            "  --lkh-exe <path>\n",
             "  --work-dir <path>\n",
             "  --projection-radius <f64>\n",
             "  --max-chunk-size <usize>\n",
@@ -400,10 +354,6 @@ impl SolverOptions {
 
     pub fn input_path(&self) -> Option<PathBuf> {
         check_path(&self.input)
-    }
-
-    pub fn lkh_path(&self) -> &Path {
-        &self.lkh_exe
     }
 
     pub fn work_dir_path(&self) -> &Path {
@@ -553,7 +503,7 @@ mod tests {
 
     #[test]
     fn parse_from_iter_applies_known_cli_options() {
-        let (options, _) = SolverOptions::parse_from_iter([
+        let options = SolverOptions::parse_from_iter([
             "--projection-radius=120.5",
             "--max-chunk-size=42",
             "--centroid-order-seed=77",
@@ -649,7 +599,7 @@ mod tests {
     // }
     #[test]
     fn parse_from_iter_accepts_no_log_timestamp_flag() {
-        let (options, _) =
+        let options =
             SolverOptions::parse_from_iter(["--no-log-timestamp"]).expect("parse options");
         assert!(!options.log_timestamp);
     }
@@ -663,7 +613,7 @@ mod tests {
 
     #[test]
     fn parse_from_iter_accepts_no_cleanup_flag() {
-        let (options, _) = SolverOptions::parse_from_iter(["--no-cleanup"]).expect("parse options");
+        let options = SolverOptions::parse_from_iter(["--no-cleanup"]).expect("parse options");
         assert!(!options.cleanup);
     }
 
@@ -676,14 +626,14 @@ mod tests {
 
     #[test]
     fn parse_from_iter_accepts_use_initial_tour_flag() {
-        let (options, _) =
+        let options =
             SolverOptions::parse_from_iter(["--use-initial-tour"]).expect("parse options");
         assert!(options.use_initial_tour);
     }
 
     #[test]
     fn parse_from_iter_accepts_no_use_initial_tour_flag() {
-        let (options, _) =
+        let options =
             SolverOptions::parse_from_iter(["--use-initial-tour", "--no-use-initial-tour"])
                 .expect("parse options");
         assert!(!options.use_initial_tour);
@@ -711,13 +661,9 @@ mod tests {
     }
 
     #[test]
-    fn parse_from_iter_reads_lkh_exe_and_work_dir() {
-        let (options, saw_lkh) =
-            SolverOptions::parse_from_iter(["--lkh-exe=/bin/lkh", "--work-dir=/tmp/work"])
-                .expect("options should be parsed");
-
-        assert!(saw_lkh);
-        assert_eq!(options.lkh_path(), std::path::Path::new("/bin/lkh"));
+    fn parse_from_iter_reads_work_dir() {
+        let options = SolverOptions::parse_from_iter(["--work-dir=/tmp/work"])
+            .expect("options should be parsed");
         assert_eq!(options.work_dir_path(), std::path::Path::new("/tmp/work"));
     }
 
@@ -726,18 +672,11 @@ mod tests {
         let relative = std::path::PathBuf::from("tmp").join("..").join("work");
         let expected = std::path::absolute(&relative).expect("absolute path");
 
-        let (options, _) =
+        let options =
             SolverOptions::parse_from_iter([format!("--work-dir={}", relative.display())])
                 .expect("options should be parsed");
 
         assert_eq!(options.work_dir_path(), expected);
-    }
-
-    #[test]
-    fn parse_from_iter_requires_value_for_lkh_exe() {
-        let err =
-            SolverOptions::parse_from_iter(["--lkh-exe"]).expect_err("missing value should fail");
-        assert!(err.to_string().contains("Missing value for --lkh-exe"));
     }
 
     #[test]

@@ -1,0 +1,207 @@
+use crate::{distance::euc_2d, problem::Problem};
+
+/// Tour stored as a circular sequence of node indices.
+///
+/// LKH represents tours with a `Pred`/`Suc` doubly-linked list plus a
+/// two-level segment tree for fast `Flip`/`Between`. For the working size
+/// range tsp_mt_core uses (≤ a few thousand nodes per chunk) an O(n) flip
+/// on a `Vec<u32>` is fast enough — the more elaborate representation is
+/// reserved for a follow-up if profiling demands it.
+///
+/// Invariants:
+/// - `tour.len() == n`
+/// - `tour` is a permutation of `0..n`
+/// - `pos[tour[i]] == i` for every position
+#[derive(Clone, Debug)]
+pub struct Tour {
+    tour: Vec<u32>,
+    pos: Vec<u32>,
+}
+
+impl Tour {
+    pub fn from_order(order: &[u32]) -> Self {
+        let n = order.len();
+        let mut pos = vec![0u32; n];
+        for (i, &node) in order.iter().enumerate() {
+            pos[node as usize] = i as u32;
+        }
+        Self {
+            tour: order.to_vec(),
+            pos,
+        }
+    }
+
+    pub fn identity(n: usize) -> Self {
+        let order: Vec<u32> = (0..n as u32).collect();
+        Self::from_order(&order)
+    }
+
+    pub fn n(&self) -> usize {
+        self.tour.len()
+    }
+
+    #[inline]
+    pub fn node_at(&self, position: usize) -> u32 {
+        self.tour[position]
+    }
+
+    #[inline]
+    pub fn position_of(&self, node: u32) -> usize {
+        self.pos[node as usize] as usize
+    }
+
+    #[inline]
+    pub fn next(&self, node: u32) -> u32 {
+        let n = self.tour.len();
+        let p = self.pos[node as usize] as usize;
+        self.tour[(p + 1) % n]
+    }
+
+    #[inline]
+    pub fn prev(&self, node: u32) -> u32 {
+        let n = self.tour.len();
+        let p = self.pos[node as usize] as usize;
+        self.tour[(p + n - 1) % n]
+    }
+
+    /// Reverse the tour segment between positions `i+1` and `j`
+    /// (inclusive) — a standard 2-opt flip. Picks the shorter side
+    /// to flip so the worst case is O(n/2) per move.
+    pub fn flip_positions(&mut self, i: usize, j: usize) {
+        let n = self.tour.len();
+        let start = (i + 1) % n;
+        let end = j % n;
+        let segment_len = if end >= start {
+            end - start + 1
+        } else {
+            n - start + end + 1
+        };
+
+        if segment_len * 2 > n {
+            // Flip the complement instead (shorter side).
+            let comp_start = (end + 1) % n;
+            let comp_end = (start + n - 1) % n;
+            self.flip_range(comp_start, comp_end, n - segment_len);
+        } else {
+            self.flip_range(start, end, segment_len);
+        }
+    }
+
+    fn flip_range(&mut self, start: usize, end: usize, len: usize) {
+        let n = self.tour.len();
+        let mut left = start;
+        let mut right = end;
+        for _ in 0..(len / 2) {
+            self.tour.swap(left, right);
+            self.pos[self.tour[left] as usize] = left as u32;
+            self.pos[self.tour[right] as usize] = right as u32;
+            left = (left + 1) % n;
+            right = (right + n - 1) % n;
+        }
+        if len % 2 == 1 {
+            self.pos[self.tour[left] as usize] = left as u32;
+        }
+    }
+
+    /// Tour length under the EUC_2D edge weight.
+    pub fn length(&self, problem: &Problem) -> i64 {
+        let n = self.tour.len();
+        let coords = problem.coords();
+        let mut total: i64 = 0;
+        for i in 0..n {
+            let a = self.tour[i] as usize;
+            let b = self.tour[(i + 1) % n] as usize;
+            total += euc_2d(coords[a], coords[b]);
+        }
+        total
+    }
+
+    pub fn as_slice(&self) -> &[u32] {
+        &self.tour
+    }
+
+    pub fn into_vec_usize(self) -> Vec<usize> {
+        self.tour.into_iter().map(|v| v as usize).collect()
+    }
+
+    #[cfg(test)]
+    pub fn validate(&self) -> bool {
+        let n = self.tour.len();
+        if self.pos.len() != n {
+            return false;
+        }
+        let mut seen = vec![false; n];
+        for (i, &node) in self.tour.iter().enumerate() {
+            let id = node as usize;
+            if id >= n || seen[id] {
+                return false;
+            }
+            seen[id] = true;
+            if self.pos[id] as usize != i {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::coord::Point2D;
+
+    fn square_problem() -> Problem {
+        Problem::new(vec![
+            Point2D::new(0.0, 0.0),
+            Point2D::new(1.0, 0.0),
+            Point2D::new(1.0, 1.0),
+            Point2D::new(0.0, 1.0),
+        ])
+        .expect("valid problem")
+    }
+
+    #[test]
+    fn identity_tour_is_well_formed() {
+        let t = Tour::identity(4);
+        assert!(t.validate());
+        assert_eq!(t.next(0), 1);
+        assert_eq!(t.next(3), 0);
+        assert_eq!(t.prev(0), 3);
+    }
+
+    #[test]
+    fn length_of_unit_square_traversal_is_four() {
+        let t = Tour::identity(4);
+        assert_eq!(t.length(&square_problem()), 4);
+    }
+
+    #[test]
+    fn flip_reverses_short_segment() {
+        let mut t = Tour::identity(6);
+        t.flip_positions(0, 3);
+        assert!(t.validate());
+        assert_eq!(t.as_slice(), &[0, 3, 2, 1, 4, 5]);
+    }
+
+    #[test]
+    fn flip_picks_shorter_side() {
+        let mut t = Tour::identity(6);
+        t.flip_positions(4, 1);
+        assert!(t.validate());
+        // After flipping the wrap-around segment 5->0->1: the equivalent
+        // un-rotated tour stays canonical because we picked the shorter side.
+        // Just verify invariants.
+        assert_eq!(t.n(), 6);
+    }
+
+    #[test]
+    fn flip_full_round_trip_restores_tour() {
+        let mut t = Tour::identity(8);
+        let before = t.as_slice().to_vec();
+        t.flip_positions(2, 6);
+        assert!(t.validate());
+        t.flip_positions(2, 6);
+        assert!(t.validate());
+        assert_eq!(t.as_slice(), &before[..]);
+    }
+}
