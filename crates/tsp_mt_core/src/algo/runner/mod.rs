@@ -245,7 +245,7 @@ pub fn lkh_multi_parallel(input: SolverInput, options: SolverOptions) -> Result<
     // beyond that is diminishing returns.
     let refine_time_limit = scaled_time_limit_seconds(projected_points.len())
         .max(MIN_REFINE_TIME_LIMIT_SECONDS as f64)
-        .min(8.0);
+        .min(5.0);
     // Refinement starts from a near-locally-optimal stitched tour
     // but still benefits significantly from kick-based diversification
     // — many seam-induced local minima only get escaped via a
