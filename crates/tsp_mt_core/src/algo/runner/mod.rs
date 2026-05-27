@@ -125,11 +125,14 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
         })
         .collect();
 
-    let best_tour = run_results?
-        .into_iter()
-        .min_by(|a, b| a.1.total_cmp(&b.1))
+    let mut sorted_results = run_results?;
+    sorted_results.sort_by(|a, b| a.1.total_cmp(&b.1));
+    let best_tour = sorted_results
+        .first()
         .ok_or_else(|| Error::other(ERR_NO_RESULTS))?
-        .0;
+        .0
+        .clone();
+    let runner_up_tour = sorted_results.get(1).map(|(t, _)| t.clone());
 
     // === A: post multi-seed unified refinement ===
     // Mirror of the chunked path's post-stitch LK pass. Take the
@@ -151,10 +154,24 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
     .with_initial_tour(best_tour)
     .with_max_no_improvement(REFINE_MAX_NO_IMPROVEMENT)
     .with_move_type(2);
+    // === F-lite: recombination via candidate-set augmentation ===
+    // Take edges from the second-best multi-seed tour and splice
+    // them into the candidate set used by the refinement. The
+    // refinement search now has access to both tours' edges and can
+    // synthesise moves spanning them — a poor-man's IPT crossover
+    // without the full LKH machinery (~80 LOC vs ~400). Edges
+    // already in the candidate set are skipped, so the effective
+    // size grows by at most n.
+    let mut refine_candidates = global_candidates.clone();
+    if let Some(runner_up) = runner_up_tour.as_ref() {
+        let runner_up_u32: Vec<u32> = runner_up.iter().map(|&i| i as u32).collect();
+        let refine_problem_for_coords = build_problem(&projected_points)?;
+        refine_candidates.add_tour_edges(&runner_up_u32, refine_problem_for_coords.coords());
+    }
     let refined = LkSolver::new_with_candidates(
         refine_problem,
         refine_params,
-        global_candidates.clone(),
+        refine_candidates,
     )
     .solve()?;
     log::info!(

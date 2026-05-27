@@ -151,6 +151,40 @@ impl CandidateSet {
         Self { candidates }
     }
 
+    /// Splice every edge of `tour` into the candidate set: for each
+    /// node in the tour, add its tour-neighbours (both directions) as
+    /// candidates if they aren't already in the node's list. Re-sorts
+    /// by cost after merging so the LK gain criterion's
+    /// "candidates sorted ascending" invariant holds.
+    ///
+    /// Used for IPT-style recombination — feed multi-seed runner-up
+    /// tour edges into the candidate graph so the post-multi-seed LK
+    /// refinement can synthesise moves spanning both starting tours.
+    pub fn add_tour_edges(&mut self, tour: &[u32], coords: &[crate::coord::Point2D]) {
+        let n = self.candidates.len();
+        for (pos, &node) in tour.iter().enumerate() {
+            let next = tour[(pos + 1) % tour.len()];
+            self.add_edge(node, next, coords, n);
+            self.add_edge(next, node, coords, n);
+        }
+        for entry in &mut self.candidates {
+            entry.sort_unstable_by_key(|c| c.cost);
+            entry.dedup_by_key(|c| c.to);
+        }
+    }
+
+    fn add_edge(&mut self, from: u32, to: u32, coords: &[crate::coord::Point2D], n: usize) {
+        if (from as usize) >= n || (to as usize) >= n || from == to {
+            return;
+        }
+        let list = &mut self.candidates[from as usize];
+        if list.iter().any(|c| c.to == to) {
+            return;
+        }
+        let cost = crate::distance::euc_2d(coords[from as usize], coords[to as usize]);
+        list.push(Candidate { to, cost });
+    }
+
     /// Truncate each node's candidate list to its `k` cheapest entries.
     /// Zero-alloc when `k` ≥ current size; otherwise reuses the same
     /// outer Vec by draining the tail. Lets a single globally-built
