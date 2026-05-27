@@ -114,10 +114,15 @@ impl Solver {
         );
 
         if self.params.trace_level >= 1 {
+            let (flips, flip_ops, relocates, relocate_ops) = crate::tour::take_stats();
             log::info!(
-                "lin_kernighan: trial=1 length={} elapsed={:.2}s",
+                "lin_kernighan: trial=1 length={} elapsed={:.2}s flips={} flip_ops={} relocates={} relocate_ops={}",
                 best_len,
-                start.elapsed().as_secs_f64()
+                start.elapsed().as_secs_f64(),
+                flips,
+                flip_ops,
+                relocates,
+                relocate_ops,
             );
         }
 

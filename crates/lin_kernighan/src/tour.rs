@@ -1,4 +1,26 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use crate::{distance::euc_2d, problem::Problem};
+
+/// Global perf counters for hot-path operations. Read via `Tour::stats`
+/// from the test/bench harness; production code can leave these
+/// untouched at near-zero cost (single relaxed atomic increment per
+/// op).
+pub static FLIP_COUNT: AtomicU64 = AtomicU64::new(0);
+pub static FLIP_OPS: AtomicU64 = AtomicU64::new(0);
+pub static RELOCATE_COUNT: AtomicU64 = AtomicU64::new(0);
+pub static RELOCATE_OPS: AtomicU64 = AtomicU64::new(0);
+
+/// Snapshot the four perf counters and reset to zero. Returns
+/// `(flip_calls, flip_ops_total, relocate_calls, relocate_ops_total)`.
+pub fn take_stats() -> (u64, u64, u64, u64) {
+    (
+        FLIP_COUNT.swap(0, Ordering::Relaxed),
+        FLIP_OPS.swap(0, Ordering::Relaxed),
+        RELOCATE_COUNT.swap(0, Ordering::Relaxed),
+        RELOCATE_OPS.swap(0, Ordering::Relaxed),
+    )
+}
 
 /// Tour stored as a circular sequence of node indices.
 ///
@@ -133,14 +155,19 @@ impl Tour {
         //    by seg_len: the segment slides back to just after the
         //    insertion point.
         // 3. otherwise: impossible (filtered above).
+        RELOCATE_COUNT.fetch_add(1, Ordering::Relaxed);
+        let span = if insert_after_pos > seg_end {
+            insert_after_pos - seg_start + 1
+        } else {
+            seg_end - insert_after_pos
+        };
+        RELOCATE_OPS.fetch_add(span as u64, Ordering::Relaxed);
         if insert_after_pos > seg_end {
             self.tour[seg_start..=insert_after_pos].rotate_left(seg_len);
-            // Update pos for the affected range.
             for i in seg_start..=insert_after_pos {
                 self.pos[self.tour[i] as usize] = i as u32;
             }
         } else {
-            // insert_after_pos < seg_start
             self.tour[(insert_after_pos + 1)..=seg_end].rotate_right(seg_len);
             for i in (insert_after_pos + 1)..=seg_end {
                 self.pos[self.tour[i] as usize] = i as u32;
@@ -173,6 +200,8 @@ impl Tour {
     }
 
     fn flip_range(&mut self, start: usize, end: usize, len: usize) {
+        FLIP_COUNT.fetch_add(1, Ordering::Relaxed);
+        FLIP_OPS.fetch_add(len as u64 / 2, Ordering::Relaxed);
         let n = self.tour.len();
         let mut left = start;
         let mut right = end;

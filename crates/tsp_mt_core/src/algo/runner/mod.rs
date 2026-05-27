@@ -260,7 +260,12 @@ pub fn lkh_multi_parallel(input: SolverInput, options: SolverOptions) -> Result<
         MULTI_SEED_TRACE_LEVEL,
     )
     .with_initial_tour(merged_tour.clone())
-    .with_max_no_improvement(REFINE_MAX_NO_IMPROVEMENT);
+    .with_max_no_improvement(REFINE_MAX_NO_IMPROVEMENT)
+    // Refinement skips 3-opt + Or-opt — those are O(n)-per-apply
+    // tour rebuilds that murder runtime on n≥5k tours. 2-opt sweeps
+    // do most of the seam-fixing work and stay near-constant per
+    // sweep thanks to don't-look-bit propagation.
+    .with_move_type(2);
     let refine_outcome = LkSolver::new_with_candidates(
         refine_problem,
         refine_params,
