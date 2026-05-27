@@ -70,21 +70,49 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
 
     let run_results: Result<Vec<(Vec<usize>, f64)>> = seeds
         .into_par_iter()
-        .map(|seed| -> Result<(Vec<usize>, f64)> {
+        .enumerate()
+        .map(|(seed_idx, seed)| -> Result<(Vec<usize>, f64)> {
             // === E: stronger per-seed search ===
             // Enable 4-opt (move_type=4) to broaden each seed's
             // search beyond the chunk-solver's k≤3 limit. Bump
             // max_no_improvement so kicks keep firing for longer
             // before the per-seed stagnation early-exit kicks in.
+            //
+            // === P: heterogeneous move_type across seeds ===
+            // Even-indexed seeds use deep search (move_type=4);
+            // odd-indexed seeds use fast search (move_type=2).
+            // Fast seeds explore more starting tours within
+            // budget; deep seeds exploit each starting tour more
+            // thoroughly. Best-of-N captures both regimes.
+            let move_type = if seed_idx.is_multiple_of(2) { 4 } else { 2 };
             let params = seeded_params(seed, max_trials, per_seed_time, MULTI_SEED_TRACE_LEVEL)
-                .with_move_type(4)
+                .with_move_type(move_type)
                 .with_max_no_improvement(SEED_MAX_NO_IMPROVEMENT);
-            let params = maybe_attach_initial_tour(
-                params,
-                projected_points.len(),
-                options.use_initial_tour,
-            );
+
             let problem = build_problem(&projected_points)?;
+
+            // === K: per-seed initial-tour diversity ===
+            // Half of the seeds (the odd indices) get a random
+            // greedy-NN starting tour driven by their seed value;
+            // the other half use the deterministic greedy-fragment
+            // tour (greedy multi-fragment heuristic, our default).
+            // Mixing starting basins lets best-of-N explore tours
+            // the perturbation kicks alone wouldn't reach.
+            let params = if options.use_initial_tour {
+                // Caller explicitly asked for the identity initial
+                // tour — honor that for all seeds.
+                maybe_attach_initial_tour(params, projected_points.len(), true)
+            } else if !seed_idx.is_multiple_of(2) {
+                let nn_tour = lin_kernighan::initial::greedy_nn(
+                    &problem,
+                    &global_candidates,
+                    seed,
+                );
+                params.with_initial_tour(nn_tour.into_vec_usize())
+            } else {
+                params
+            };
+
             let outcome = LkSolver::new_with_candidates(
                 problem,
                 params,
