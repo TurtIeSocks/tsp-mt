@@ -151,6 +151,20 @@ impl CandidateSet {
         Self { candidates }
     }
 
+    /// Truncate each node's candidate list to its `k` cheapest entries.
+    /// Zero-alloc when `k` ≥ current size; otherwise reuses the same
+    /// outer Vec by draining the tail. Lets a single globally-built
+    /// k=K candidate set serve callers that want a tighter k for hot
+    /// inner loops (e.g. the post-stitch refinement).
+    pub fn truncated(&self, k: usize) -> Self {
+        let candidates: Vec<Vec<Candidate>> = self
+            .candidates
+            .iter()
+            .map(|entry| entry.iter().take(k).copied().collect())
+            .collect();
+        Self { candidates }
+    }
+
     /// Restrict a globally-built candidate set to a chunk identified by
     /// `local_to_global` (length = chunk size, mapping chunk-local node
     /// index → original global node id). For each local node we look up
