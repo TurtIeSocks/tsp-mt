@@ -154,7 +154,7 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
     let refined = LkSolver::new_with_candidates(
         refine_problem,
         refine_params,
-        global_candidates,
+        global_candidates.clone(),
     )
     .solve()?;
     log::info!(
@@ -162,7 +162,56 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
         refined.length
     );
 
-    Ok(refined.tour.into_iter().map(|idx| points[idx]).collect())
+    // === N: 2nd kick-polish round ===
+    // Take the refinement output and re-kick it from N parallel
+    // seeds. Each polish run starts from the same refined tour,
+    // applies its own seeded double-bridge, then improves. Picks
+    // best of N + the refined tour itself. Mostly a no-op if
+    // refinement found the basin's bottom, but occasionally a
+    // kick lands in a deeper basin we missed.
+    let polish_time = (base_time * 2.0)
+        .max(MIN_REFINE_TIME_LIMIT_SECONDS as f64)
+        .min(4.0);
+    let polish_seeds = generate_seeds(DEFAULT_BASE_SEED.wrapping_add(1), run_count);
+    let refined_tour = refined.tour.clone();
+    let polish_results: Result<Vec<(Vec<usize>, f64)>> = polish_seeds
+        .into_par_iter()
+        .map(|seed| -> Result<(Vec<usize>, f64)> {
+            let params = seeded_params(
+                seed,
+                scaled_max_trials(points.len()),
+                polish_time,
+                CENTROID_TRACE_LEVEL,
+            )
+            .with_initial_tour(refined_tour.clone())
+            .with_move_type(2)
+            .with_max_no_improvement(REFINE_MAX_NO_IMPROVEMENT);
+            let problem = build_problem(&projected_points)?;
+            let outcome = LkSolver::new_with_candidates(
+                problem,
+                params,
+                global_candidates.clone(),
+            )
+            .solve()?;
+            let length = cycle_length(&points, &outcome.tour);
+            Ok((outcome.tour, length))
+        })
+        .collect();
+
+    // Convert refined.length (integer EUC_2D in scaled space) to
+    // the same metric polish runs use (great-circle meters) so the
+    // best-of comparison is apples-to-apples.
+    let refined_meters = cycle_length(&points, &refined.tour);
+    let best_after_polish = polish_results?
+        .into_iter()
+        .chain(std::iter::once((refined.tour, refined_meters)))
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .ok_or_else(|| Error::other(ERR_NO_RESULTS))?
+        .0;
+
+    log::info!("post-polish: picked best of {} candidates", run_count + 1);
+
+    Ok(best_after_polish.into_iter().map(|idx| points[idx]).collect())
 }
 
 /// Per-seed stagnation tolerance in multi-seed mode. Higher than the
