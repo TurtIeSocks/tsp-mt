@@ -49,16 +49,48 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
         .project();
     let run_count = available_seed_runs();
     let max_trials = scaled_max_trials(points.len());
-    let time_limit = scaled_time_limit_seconds(points.len());
+
+    // === B: longer per-seed time_limit ===
+    // Multi-seed runs N=cores in parallel, so wall-clock is one
+    // run's time. The chunked path's per-chunk `time_limit` is sized
+    // for "many chunks fit in this much wall time"; here we have
+    // one input × N parallel runs, so we can afford 4× the
+    // per-chunk budget without hurting overall runtime much. Capped
+    // at 12s to avoid pathological slowdown on tiny instances.
+    let base_time = scaled_time_limit_seconds(points.len());
+    let per_seed_time = (base_time * 4.0).max(MIN_REFINE_TIME_LIMIT_SECONDS as f64).min(12.0);
+
     let seeds = generate_seeds(DEFAULT_BASE_SEED, run_count);
+
+    // Shared NN candidate set built once. Each parallel seed run uses
+    // the same candidates — diversification comes from per-seed
+    // initial tour and kick sequence, not the candidate graph. Also
+    // reused by the post-multi-seed refinement below.
+    let global_candidates = build_global_candidates(&projected_points, SHARED_MAX_CANDIDATES)?;
 
     let run_results: Result<Vec<(Vec<usize>, f64)>> = seeds
         .into_par_iter()
         .map(|seed| -> Result<(Vec<usize>, f64)> {
-            let params = seeded_params(seed, max_trials, time_limit, MULTI_SEED_TRACE_LEVEL);
-            let params = maybe_attach_initial_tour(params, projected_points.len(), options.use_initial_tour);
+            // === E: stronger per-seed search ===
+            // Enable 4-opt (move_type=4) to broaden each seed's
+            // search beyond the chunk-solver's k≤3 limit. Bump
+            // max_no_improvement so kicks keep firing for longer
+            // before the per-seed stagnation early-exit kicks in.
+            let params = seeded_params(seed, max_trials, per_seed_time, MULTI_SEED_TRACE_LEVEL)
+                .with_move_type(4)
+                .with_max_no_improvement(SEED_MAX_NO_IMPROVEMENT);
+            let params = maybe_attach_initial_tour(
+                params,
+                projected_points.len(),
+                options.use_initial_tour,
+            );
             let problem = build_problem(&projected_points)?;
-            let outcome = LkSolver::new(problem, params).solve()?;
+            let outcome = LkSolver::new_with_candidates(
+                problem,
+                params,
+                global_candidates.clone(),
+            )
+            .solve()?;
 
             let length = cycle_length(&points, &outcome.tour);
             Ok((outcome.tour, length))
@@ -71,8 +103,48 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
         .ok_or_else(|| Error::other(ERR_NO_RESULTS))?
         .0;
 
-    Ok(best_tour.into_iter().map(|idx| points[idx]).collect())
+    // === A: post multi-seed unified refinement ===
+    // Mirror of the chunked path's post-stitch LK pass. Take the
+    // best tour out of the N parallel seeds and run one more LK
+    // sweep on it using 2-opt only — same trick that hit on the
+    // chunked path (Or-opt and 3-opt apply are O(n) tour rebuilds
+    // at this scale, drown out the cheap 2-opt sweeps that catch
+    // cross-seed-untouchable local moves).
+    let refine_time_limit = (base_time * 2.0)
+        .max(MIN_REFINE_TIME_LIMIT_SECONDS as f64)
+        .min(5.0);
+    let refine_problem = build_problem(&projected_points)?;
+    let refine_params = seeded_params(
+        DEFAULT_BASE_SEED,
+        scaled_max_trials(points.len()),
+        refine_time_limit,
+        MULTI_SEED_TRACE_LEVEL,
+    )
+    .with_initial_tour(best_tour)
+    .with_max_no_improvement(REFINE_MAX_NO_IMPROVEMENT)
+    .with_move_type(2);
+    let refined = LkSolver::new_with_candidates(
+        refine_problem,
+        refine_params,
+        global_candidates,
+    )
+    .solve()?;
+    log::info!(
+        "post-multi-seed LK refinement: length={}",
+        refined.length
+    );
+
+    Ok(refined.tour.into_iter().map(|idx| points[idx]).collect())
 }
+
+/// Per-seed stagnation tolerance in multi-seed mode. Higher than the
+/// chunked path's 3000 default because each seed has more time budget
+/// (B) and we want kicks to keep firing until diminishing returns.
+const SEED_MAX_NO_IMPROVEMENT: usize = 5000;
+/// Refinement stagnation tolerance — same as the chunked-path
+/// `REFINE_MAX_NO_IMPROVEMENT` constant; copied here to avoid
+/// cross-module visibility churn.
+const REFINE_MAX_NO_IMPROVEMENT: usize = 500;
 
 #[tsp_mt_derive::timer()]
 pub fn lkh_multi_parallel(input: SolverInput, options: SolverOptions) -> Result<Vec<LKHNode>> {
