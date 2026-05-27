@@ -127,12 +127,49 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
 
     let mut sorted_results = run_results?;
     sorted_results.sort_by(|a, b| a.1.total_cmp(&b.1));
-    let best_tour = sorted_results
+    let mut best_tour = sorted_results
         .first()
         .ok_or_else(|| Error::other(ERR_NO_RESULTS))?
         .0
         .clone();
     let runner_up_tour = sorted_results.get(1).map(|(t, _)| t.clone());
+
+    // === F (full IPT): one-shot boundary-segment crossover ===
+    // Take best_tour (T1) and runner_up (T2) from the parallel seeds
+    // and find the single best improving equal-cardinality boundary
+    // segment swap (gain measured in the projected euc_2d metric
+    // that LK itself optimises). All inner walks have hard step
+    // caps and the output is Hamiltonicity-validated before return.
+    //
+    // IPT optimises the projected euc_2d distance, but the runner
+    // ranks tours via haversine `cycle_length`. The two metrics can
+    // disagree on tiny deltas — accept the swap only when it also
+    // improves haversine. Without this guard the projected-space win
+    // can be a real-metric regression that subsequent LK refinement
+    // (which itself works in projected euc_2d) does not undo.
+    if let Some(runner_up) = runner_up_tour.as_ref() {
+        let t1_u32: Vec<u32> = best_tour.iter().map(|&i| i as u32).collect();
+        let t2_u32: Vec<u32> = runner_up.iter().map(|&i| i as u32).collect();
+        let ipt_problem = build_problem(&projected_points)?;
+        if let Some(child) = lin_kernighan::recombine::merge_with_tour_ipt(
+            &t1_u32,
+            &t2_u32,
+            ipt_problem.coords(),
+        ) {
+            let child_usize: Vec<usize> = child.iter().map(|&v| v as usize).collect();
+            let before_len = cycle_length(&points, &best_tour);
+            let after_len = cycle_length(&points, &child_usize);
+            if after_len < before_len {
+                log::info!(
+                    "F (IPT) recombination: haversine {} -> {} (delta={:+.4}%)",
+                    before_len,
+                    after_len,
+                    (after_len - before_len) / before_len * 100.0,
+                );
+                best_tour = child_usize;
+            }
+        }
+    }
 
     // === A: post multi-seed unified refinement ===
     // Mirror of the chunked path's post-stitch LK pass. Take the

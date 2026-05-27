@@ -17,6 +17,7 @@ pub mod initial;
 pub mod lk;
 pub mod params;
 pub mod problem;
+pub mod recombine;
 pub mod solver;
 pub mod tour;
 
