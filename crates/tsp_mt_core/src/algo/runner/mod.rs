@@ -409,9 +409,70 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
         })
         .collect();
     let refined3_meters = cycle_length(&points, &refined3.tour);
-    let final_tour = polish3_results?
+    let best_after_polish3 = polish3_results?
         .into_iter()
         .chain(std::iter::once((refined3.tour, refined3_meters)))
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .ok_or_else(|| Error::other(ERR_NO_RESULTS))?
+        .0;
+
+    if n_for_pipeline < 20_000 {
+        return Ok(best_after_polish3.into_iter().map(|idx| points[idx]).collect());
+    }
+
+    // === 4th refinement + polish cycle for n>=20k ===
+    // The third cycle still finds gains at the 20k/25k scale, so a
+    // fourth cycle continues the trend. Empirically buys ~0.06% gap
+    // closure at the cost of ~20s wall-clock per cell, only
+    // activated for inputs large enough that the marginal quality
+    // gain justifies the runtime hit.
+    let refine4_params = seeded_params(
+        DEFAULT_BASE_SEED.wrapping_add(6),
+        scaled_max_trials(points.len()),
+        refine_time_limit,
+        MULTI_SEED_TRACE_LEVEL,
+    )
+    .with_initial_tour(best_after_polish3.clone())
+    .with_max_no_improvement(REFINE_MAX_NO_IMPROVEMENT)
+    .with_move_type(2);
+    let refine4_problem = build_problem(&projected_points)?;
+    let refined4 = LkSolver::new_with_candidates(
+        refine4_problem,
+        refine4_params,
+        global_candidates.clone(),
+    )
+    .solve()?;
+    log::info!("post-polish3 LK refinement: length={}", refined4.length);
+
+    let polish4_seeds = generate_seeds(DEFAULT_BASE_SEED.wrapping_add(7), available_seed_runs());
+    let refined4_tour_clone = refined4.tour.clone();
+    let polish4_results: Result<Vec<(Vec<usize>, f64)>> = polish4_seeds
+        .into_par_iter()
+        .map(|seed| -> Result<(Vec<usize>, f64)> {
+            let params = seeded_params(
+                seed,
+                scaled_max_trials(points.len()),
+                polish_time,
+                CENTROID_TRACE_LEVEL,
+            )
+            .with_initial_tour(refined4_tour_clone.clone())
+            .with_move_type(2)
+            .with_max_no_improvement(REFINE_MAX_NO_IMPROVEMENT);
+            let problem = build_problem(&projected_points)?;
+            let outcome = LkSolver::new_with_candidates(
+                problem,
+                params,
+                global_candidates.clone(),
+            )
+            .solve()?;
+            let length = cycle_length(&points, &outcome.tour);
+            Ok((outcome.tour, length))
+        })
+        .collect();
+    let refined4_meters = cycle_length(&points, &refined4.tour);
+    let final_tour = polish4_results?
+        .into_iter()
+        .chain(std::iter::once((refined4.tour, refined4_meters)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .ok_or_else(|| Error::other(ERR_NO_RESULTS))?
         .0;
