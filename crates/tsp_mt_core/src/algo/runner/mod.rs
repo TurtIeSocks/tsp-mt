@@ -276,6 +276,20 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
 
     log::info!("post-polish: picked best of {} candidates", run_count + 1);
 
+    // Adaptive pipeline depth: the extra refine+polish cycles below
+    // each cost ~10-20s wall-clock and only buy real quality at
+    // medium-to-large `n`. At small `n` the basin has already been
+    // exhausted by the first cycle and the work is wasted.
+    //
+    // Empirically (see commit history / verify-multi-seed.sh runs):
+    //   n <  5_000: skip both extra cycles
+    //   n < 10_000: keep 2nd cycle, skip 3rd
+    //   n >= 10_000: full 3 cycles
+    let n_for_pipeline = points.len();
+    if n_for_pipeline < 5_000 {
+        return Ok(best_after_polish.into_iter().map(|idx| points[idx]).collect());
+    }
+
     // === 2nd refinement pass after kick-polish ===
     // Take the best tour from the kick-polish round and run another
     // LK refinement (single-seed, 2-opt only). The polish kicks may
@@ -340,6 +354,10 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .ok_or_else(|| Error::other(ERR_NO_RESULTS))?
         .0;
+
+    if n_for_pipeline < 10_000 {
+        return Ok(best_after_polish2.into_iter().map(|idx| points[idx]).collect());
+    }
 
     // === 3rd refinement pass after 2nd polish ===
     // Each refine+polish cycle keeps finding small gains at large n
