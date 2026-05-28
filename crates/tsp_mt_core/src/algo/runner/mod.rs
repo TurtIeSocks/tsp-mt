@@ -47,7 +47,12 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
     let projected_points = PlaneProjection::new(&points)
         .radius(options.projection_radius)
         .project();
-    let run_count = available_seed_runs();
+    // Use half of the available cores for the initial multi-seed
+    // round. Empirically the second-half of seeds don't add useful
+    // diversity (they all converge to the same local-min basin), and
+    // running fewer seeds parallel-wise reduces inter-core cache
+    // contention so each seed's LK iteration speed goes up.
+    let run_count = (available_seed_runs() / 2).max(1);
     let max_trials = scaled_max_trials(points.len());
 
     // === B: longer per-seed time_limit ===
@@ -58,7 +63,7 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
     // per-chunk budget without hurting overall runtime much. Capped
     // at 12s to avoid pathological slowdown on tiny instances.
     let base_time = scaled_time_limit_seconds(points.len());
-    let per_seed_time = (base_time * 4.0).max(MIN_REFINE_TIME_LIMIT_SECONDS as f64).min(12.0);
+    let per_seed_time = (base_time * 4.0).max(MIN_REFINE_TIME_LIMIT_SECONDS as f64).min(48.0);
 
     let seeds = generate_seeds(DEFAULT_BASE_SEED, run_count);
 
@@ -84,7 +89,13 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
             // Fast seeds explore more starting tours within
             // budget; deep seeds exploit each starting tour more
             // thoroughly. Best-of-N captures both regimes.
-            let move_type = if seed_idx.is_multiple_of(2) { 4 } else { 2 };
+            // All seeds use 2-opt only — heterogeneous move_type=4
+            // seeds were dropped after they regressed quality at
+            // small n (where they wasted budget reaching 4-opt
+            // local minima the perturbation kicks unwound) and
+            // didn't improve large n (4-opt apply costs O(n) per
+            // accept which limits the sweep count within budget).
+            let move_type = 2;
             let params = seeded_params(seed, max_trials, per_seed_time, MULTI_SEED_TRACE_LEVEL)
                 .with_move_type(move_type)
                 .with_max_no_improvement(SEED_MAX_NO_IMPROVEMENT);
@@ -180,7 +191,7 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
     // cross-seed-untouchable local moves).
     let refine_time_limit = (base_time * 2.0)
         .max(MIN_REFINE_TIME_LIMIT_SECONDS as f64)
-        .min(5.0);
+        .min(12.0);
     let refine_problem = build_problem(&projected_points)?;
     let refine_params = seeded_params(
         DEFAULT_BASE_SEED,
@@ -225,8 +236,8 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
     // kick lands in a deeper basin we missed.
     let polish_time = (base_time * 2.0)
         .max(MIN_REFINE_TIME_LIMIT_SECONDS as f64)
-        .min(4.0);
-    let polish_seeds = generate_seeds(DEFAULT_BASE_SEED.wrapping_add(1), run_count);
+        .min(8.0);
+    let polish_seeds = generate_seeds(DEFAULT_BASE_SEED.wrapping_add(1), available_seed_runs());
     let refined_tour = refined.tour.clone();
     let polish_results: Result<Vec<(Vec<usize>, f64)>> = polish_seeds
         .into_par_iter()
@@ -265,7 +276,72 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
 
     log::info!("post-polish: picked best of {} candidates", run_count + 1);
 
-    Ok(best_after_polish.into_iter().map(|idx| points[idx]).collect())
+    // === 2nd refinement pass after kick-polish ===
+    // Take the best tour from the kick-polish round and run another
+    // LK refinement (single-seed, 2-opt only). The polish kicks may
+    // have produced a tour whose best 2-opt basin is below the
+    // refinement convergence we found, so re-refining is worth the
+    // small extra cost.
+    let refine2_params = seeded_params(
+        DEFAULT_BASE_SEED.wrapping_add(2),
+        scaled_max_trials(points.len()),
+        refine_time_limit,
+        MULTI_SEED_TRACE_LEVEL,
+    )
+    .with_initial_tour(best_after_polish.clone())
+    .with_max_no_improvement(REFINE_MAX_NO_IMPROVEMENT)
+    .with_move_type(2);
+    let refine2_problem = build_problem(&projected_points)?;
+    let refined2 = LkSolver::new_with_candidates(
+        refine2_problem,
+        refine2_params,
+        global_candidates.clone(),
+    )
+    .solve()?;
+    log::info!(
+        "post-polish LK refinement: length={}",
+        refined2.length
+    );
+
+    // === 2nd kick-polish round after 2nd refinement ===
+    // Mirror of the first polish round, but on the post-2nd-
+    // refinement tour. Cheap on top of the existing pipeline and
+    // catches the occasional kick that beats the doubly-refined
+    // baseline.
+    let polish2_seeds = generate_seeds(DEFAULT_BASE_SEED.wrapping_add(3), available_seed_runs());
+    let refined2_tour_clone = refined2.tour.clone();
+    let polish2_results: Result<Vec<(Vec<usize>, f64)>> = polish2_seeds
+        .into_par_iter()
+        .map(|seed| -> Result<(Vec<usize>, f64)> {
+            let params = seeded_params(
+                seed,
+                scaled_max_trials(points.len()),
+                polish_time,
+                CENTROID_TRACE_LEVEL,
+            )
+            .with_initial_tour(refined2_tour_clone.clone())
+            .with_move_type(2)
+            .with_max_no_improvement(REFINE_MAX_NO_IMPROVEMENT);
+            let problem = build_problem(&projected_points)?;
+            let outcome = LkSolver::new_with_candidates(
+                problem,
+                params,
+                global_candidates.clone(),
+            )
+            .solve()?;
+            let length = cycle_length(&points, &outcome.tour);
+            Ok((outcome.tour, length))
+        })
+        .collect();
+    let refined2_meters = cycle_length(&points, &refined2.tour);
+    let final_tour = polish2_results?
+        .into_iter()
+        .chain(std::iter::once((refined2.tour, refined2_meters)))
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .ok_or_else(|| Error::other(ERR_NO_RESULTS))?
+        .0;
+
+    Ok(final_tour.into_iter().map(|idx| points[idx]).collect())
 }
 
 /// Per-seed stagnation tolerance in multi-seed mode. Higher than the
@@ -275,7 +351,7 @@ const SEED_MAX_NO_IMPROVEMENT: usize = 5000;
 /// Refinement stagnation tolerance — same as the chunked-path
 /// `REFINE_MAX_NO_IMPROVEMENT` constant; copied here to avoid
 /// cross-module visibility churn.
-const REFINE_MAX_NO_IMPROVEMENT: usize = 500;
+const REFINE_MAX_NO_IMPROVEMENT: usize = 2000;
 
 #[tsp_mt_derive::timer()]
 pub fn lkh_multi_parallel(input: SolverInput, options: SolverOptions) -> Result<Vec<LKHNode>> {
@@ -455,7 +531,7 @@ pub fn lkh_multi_parallel(input: SolverInput, options: SolverOptions) -> Result<
     // double-bridge perturbation. Re-uses the chunk solver's trial
     // loop with a tight `max_no_improvement` so we exit quickly once
     // kicks stop paying off.
-    const REFINE_MAX_NO_IMPROVEMENT: usize = 500;
+    const REFINE_MAX_NO_IMPROVEMENT: usize = 2000;
     let refine_params = seeded_params(
         DEFAULT_BASE_SEED,
         scaled_max_trials(projected_points.len()),
