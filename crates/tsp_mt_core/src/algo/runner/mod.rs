@@ -334,9 +334,66 @@ pub fn lkh_multi_seed(input: SolverInput, options: SolverOptions) -> Result<Vec<
         })
         .collect();
     let refined2_meters = cycle_length(&points, &refined2.tour);
-    let final_tour = polish2_results?
+    let best_after_polish2 = polish2_results?
         .into_iter()
         .chain(std::iter::once((refined2.tour, refined2_meters)))
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .ok_or_else(|| Error::other(ERR_NO_RESULTS))?
+        .0;
+
+    // === 3rd refinement pass after 2nd polish ===
+    // Each refine+polish cycle keeps finding small gains at large n
+    // — the iteration spread across cycles is wider than what fits
+    // in one stage's time budget. Third cycle still pays off at the
+    // 25k cell.
+    let refine3_params = seeded_params(
+        DEFAULT_BASE_SEED.wrapping_add(4),
+        scaled_max_trials(points.len()),
+        refine_time_limit,
+        MULTI_SEED_TRACE_LEVEL,
+    )
+    .with_initial_tour(best_after_polish2.clone())
+    .with_max_no_improvement(REFINE_MAX_NO_IMPROVEMENT)
+    .with_move_type(2);
+    let refine3_problem = build_problem(&projected_points)?;
+    let refined3 = LkSolver::new_with_candidates(
+        refine3_problem,
+        refine3_params,
+        global_candidates.clone(),
+    )
+    .solve()?;
+    log::info!("post-polish2 LK refinement: length={}", refined3.length);
+
+    // === 3rd kick-polish round after 3rd refinement ===
+    let polish3_seeds = generate_seeds(DEFAULT_BASE_SEED.wrapping_add(5), available_seed_runs());
+    let refined3_tour_clone = refined3.tour.clone();
+    let polish3_results: Result<Vec<(Vec<usize>, f64)>> = polish3_seeds
+        .into_par_iter()
+        .map(|seed| -> Result<(Vec<usize>, f64)> {
+            let params = seeded_params(
+                seed,
+                scaled_max_trials(points.len()),
+                polish_time,
+                CENTROID_TRACE_LEVEL,
+            )
+            .with_initial_tour(refined3_tour_clone.clone())
+            .with_move_type(2)
+            .with_max_no_improvement(REFINE_MAX_NO_IMPROVEMENT);
+            let problem = build_problem(&projected_points)?;
+            let outcome = LkSolver::new_with_candidates(
+                problem,
+                params,
+                global_candidates.clone(),
+            )
+            .solve()?;
+            let length = cycle_length(&points, &outcome.tour);
+            Ok((outcome.tour, length))
+        })
+        .collect();
+    let refined3_meters = cycle_length(&points, &refined3.tour);
+    let final_tour = polish3_results?
+        .into_iter()
+        .chain(std::iter::once((refined3.tour, refined3_meters)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .ok_or_else(|| Error::other(ERR_NO_RESULTS))?
         .0;
