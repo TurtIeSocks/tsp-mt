@@ -26,15 +26,15 @@
 #     Wall-clock variance dominates above the budget cap; reps catch
 #     scheduler / RNG-walk jitter.
 #
-# Inputs are generated on-demand into benchmark/inputs_ultimate/
-# using the same lat/lng generator as sweep-ultimate.sh (uniform
-# random in a radius around 37.5, -122.0; seed = n*100 + dist).
+# Inputs are generated on-demand into benchmark/chunk-size-study/inputs/
+# (uniform random in a radius around 37.5, -122.0; seed = n*100 + dist).
+# These fixtures are deterministic and committed to the repo.
 #
-# Output:
-#   - Raw rows TSV  : benchmark/results/chunk-explorer-<ts>-rows.tsv
-#   - Aggregated TSV: benchmark/results/chunk-explorer-<ts>-agg.tsv
+# Output (committed under benchmark/chunk-size-study/results/):
+#   - Raw rows TSV  : chunk-explorer-<ts>-rows.tsv
+#   - Aggregated TSV: chunk-explorer-<ts>-agg.tsv
 #                     (median per (n, chunk) with gap_vs_best_within_n)
-#   - Markdown      : benchmark/results/chunk-explorer-<ts>.md
+#   - Markdown      : chunk-explorer-<ts>.md
 #
 # Set NO_RUN=1 to print the planned cells and exit (no binary calls).
 
@@ -42,21 +42,47 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NEW_BIN="$ROOT_DIR/target/release/tsp-mt"
-INPUTS_DIR="$ROOT_DIR/benchmark/inputs_ultimate"
-RESULTS_DIR="$ROOT_DIR/benchmark/results"
+[[ -f "${NEW_BIN}.exe" ]] && NEW_BIN="${NEW_BIN}.exe"
+INPUTS_DIR="$ROOT_DIR/benchmark/chunk-size-study/inputs"
+RESULTS_DIR="$ROOT_DIR/benchmark/chunk-size-study/results"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+
+PYTHON="$(command -v python3 || command -v python || true)"
+if [[ -z "$PYTHON" ]]; then
+  echo "error: python3/python not found on PATH" >&2
+  exit 1
+fi
+
+# On MSYS2/Cygwin/Git Bash, native Python and tsp-mt.exe don't understand
+# /c/foo paths. cygpath -m emits C:/foo (forward slashes, accepted by both).
+# On real Unix cygpath is absent and the helper passes paths through.
+to_native_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -m "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 ROWS_TSV="$RESULTS_DIR/chunk-explorer-${TIMESTAMP}-rows.tsv"
 AGG_TSV="$RESULTS_DIR/chunk-explorer-${TIMESTAMP}-agg.tsv"
 MD="$RESULTS_DIR/chunk-explorer-${TIMESTAMP}.md"
+PLAN="${TMPDIR:-/tmp}/chunk-explorer-plan-${TIMESTAMP}.tsv"
 
 mkdir -p "$INPUTS_DIR" "$RESULTS_DIR"
 
+INPUTS_DIR_NATIVE="$(to_native_path "$INPUTS_DIR")"
+ROWS_TSV_NATIVE="$(to_native_path "$ROWS_TSV")"
+AGG_TSV_NATIVE="$(to_native_path "$AGG_TSV")"
+MD_NATIVE="$(to_native_path "$MD")"
+PLAN_NATIVE="$(to_native_path "$PLAN")"
+
 # ----- generate the cell list + ensure input files exist -----
-python3 - <<PYEOF
+"$PYTHON" - <<PYEOF
 import math, os, random, sys
 
-OUT_DIR = "$INPUTS_DIR"
-PLAN_PATH = "/tmp/chunk-explorer-plan-${TIMESTAMP}.tsv"
+OUT_DIR = "$INPUTS_DIR_NATIVE"
+PLAN_PATH = "$PLAN_NATIVE"
 
 # n grid: every 1k from 1k-10k, every 5k from 10k-50k, every 10k from 50k-250k.
 n_values = sorted(set(
@@ -96,7 +122,9 @@ def radius_for(n: int):
     return 0.8
 
 def ensure_input(n: int, dist: int) -> str:
-    path = os.path.join(OUT_DIR, f"n{n}_d{dist}.txt")
+    # Forward-slash join so the path written to the plan TSV is consistent
+    # on both Windows (C:/...) and Unix (/...); both accept forward slashes.
+    path = f"{OUT_DIR}/n{n}_d{dist}.txt"
     if os.path.exists(path):
         with open(path) as f:
             if sum(1 for _ in f) == n:
@@ -130,7 +158,6 @@ with open(PLAN_PATH, "w") as f:
 print(f"planned {len(plan_rows)} cells across {len(n_values)} n values", file=sys.stderr)
 PYEOF
 
-PLAN="/tmp/chunk-explorer-plan-${TIMESTAMP}.tsv"
 TOTAL=$(awk 'NR>1' "$PLAN" | wc -l | tr -d ' ')
 echo "total cells: $TOTAL" >&2
 
@@ -150,20 +177,20 @@ while IFS=$'\t' read -r n chunk dist rep input_path; do
   i=$((i + 1))
   echo "[$i/$TOTAL] n=$n chunk=$chunk d=$dist rep=$rep" >&2
   stderr=$(mktemp); stdout=$(mktemp)
-  start=$(python3 -c 'import time;print(time.time())')
+  start=$("$PYTHON" -c 'import time;print(time.time())')
   "$NEW_BIN" --log-level=info --max-chunk-size="$chunk" --input="$input_path" --output="$stdout" 2>"$stderr"
-  end=$(python3 -c 'import time;print(time.time())')
-  runtime=$(python3 -c "print(f'{$end - $start:.2f}')")
+  end=$("$PYTHON" -c 'import time;print(time.time())')
+  runtime=$("$PYTHON" -c "print(f'{$end - $start:.2f}')")
   lk_new=$(grep "INFO metrics:" "$stderr" | tail -n1 | grep -oE 'total_m=[0-9]+' | cut -d= -f2)
   printf '%d\t%d\t%d\t%d\t%s\t%s\n' "$n" "$chunk" "$dist" "$rep" "$lk_new" "$runtime" >>"$ROWS_TSV"
   rm -f "$stderr" "$stdout"
 done < "$PLAN"
 
 # ----- aggregate: median lk_new per (n, chunk), gap_vs_best_within_n -----
-python3 - <<PYEOF
+"$PYTHON" - <<PYEOF
 import csv, statistics
 
-rows = list(csv.DictReader(open("$ROWS_TSV"), delimiter="\t"))
+rows = list(csv.DictReader(open("$ROWS_TSV_NATIVE"), delimiter="\t"))
 for r in rows:
     r["n"] = int(r["n"])
     r["chunk"] = int(r["chunk"])
@@ -202,7 +229,7 @@ for a in agg:
 
 agg.sort(key=lambda a: (a["n"], a["chunk"]))
 
-with open("$AGG_TSV", "w") as f:
+with open("$AGG_TSV_NATIVE", "w") as f:
     f.write("n\tchunk\treps\tlk_median\tlk_min\tlk_max\tgap_vs_best_pct\truntime_median_s\n")
     for a in agg:
         f.write(
@@ -211,10 +238,10 @@ with open("$AGG_TSV", "w") as f:
             f'{a["gap_vs_best"]:+.3f}\t{a["runtime_median"]:.2f}\n'
         )
 
-with open("$MD", "w") as f:
+with open("$MD_NATIVE", "w") as f:
     f.write("# Chunk-explorer sweep\n\n")
     f.write("Rows show median across distributions and reps. ")
-    f.write("`gap_vs_best_pct` is relative to the best chunk seen for each `n`.\n\n")
+    f.write("\`gap_vs_best_pct\` is relative to the best chunk seen for each \`n\`.\n\n")
     f.write("| n | chunk | reps | lk median | gap_vs_best | runtime |\n")
     f.write("|---:|---:|---:|---:|---:|---:|\n")
     for a in agg:

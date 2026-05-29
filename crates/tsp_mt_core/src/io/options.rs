@@ -151,7 +151,7 @@ impl SolverOptions {
 
     pub fn set_max_chunk_size(&mut self, n: usize) {
         if !env::args().any(|arg| arg.starts_with("--max-chunk-size")) {
-            let dynamic_chunk_size = (n / 4).clamp(500, 5_000);
+            let dynamic_chunk_size = chunk_optimal(n);
             log::info!("options: dynamic_chunk_size = {dynamic_chunk_size}");
             self.max_chunk_size = dynamic_chunk_size;
         }
@@ -365,6 +365,35 @@ fn default_work_dir() -> PathBuf {
     env::temp_dir().join(format!("tsp-mt-{}", process::id()))
 }
 
+/// Choose the default `max_chunk_size` for an instance of `n` points when the
+/// caller did not pass `--max-chunk-size` explicitly.
+///
+/// Derived from the chunk-size sweep in
+/// `benchmark/chunk-size-study/results/chunk-explorer-20260528T203703Z-agg.tsv` (38 values of
+/// `n` from 1k to 250k, 5 chunk sizes each, ranked by tour length within each
+/// `n`). The sweep showed a sharp regime change around `n ≈ 50k`:
+///
+/// * `n <= ~3k`: solving the whole instance as one chunk is the best tour and
+///   still cheap (< ~12s), so don't decompose.
+/// * `3k < n <= 50k`: full-instance solving wins quality by only <= ~1.3% but
+///   costs up to ~130s; a mid-size chunk that scales with `n` gets within that
+///   margin at a fraction of the runtime.
+/// * `n > 50k`: small chunks (~2.5k-7k) are Pareto-optimal — both better
+///   quality *and* faster than large chunks. Chunks <= ~1k and chunks >= ~19k
+///   both regress (overhead vs. weak local search), so stay in the 2.5k-7k
+///   band, drifting toward 7k at the top where smaller chunks hit per-chunk
+///   overhead.
+///
+/// Intermediate chunk values inside each band are interpolated (the sweep only
+/// measured a geometric grid), so this is a smooth fit, not a lookup table.
+fn chunk_optimal(n: usize) -> usize {
+    match n {
+        0..=3_000 => n.max(1),
+        3_001..=50_000 => (n / 3).clamp(2_500, 12_000),
+        _ => (n / 25).clamp(2_500, 7_000),
+    }
+}
+
 // fn find_config_file() -> Result<Option<PathBuf>> {
 //     if let Some(path) = config_from_env()? {
 //         return Ok(Some(path));
@@ -464,7 +493,7 @@ mod tests {
 
     use log::LevelFilter;
 
-    use super::{LogFormat, LogLevel, SolverMode, SolverOptions, parse_bool};
+    use super::{LogFormat, LogLevel, SolverMode, SolverOptions, chunk_optimal, parse_bool};
 
     #[test]
     fn parse_bool_accepts_common_true_values() {
@@ -796,5 +825,51 @@ mod tests {
             !parent.exists(),
             "normalization should not create parent directories"
         );
+    }
+
+    #[test]
+    fn chunk_optimal_solves_small_instances_whole() {
+        // n <= 3k: no decomposition (chunk == n), so the runner takes the
+        // single-instance path that the sweep showed gives the best tour.
+        assert_eq!(chunk_optimal(1), 1);
+        assert_eq!(chunk_optimal(1_000), 1_000);
+        assert_eq!(chunk_optimal(3_000), 3_000);
+    }
+
+    #[test]
+    fn chunk_optimal_mid_band_scales_and_clamps() {
+        // 3k < n <= 50k: ~n/3, clamped to [2.5k, 12k].
+        assert_eq!(chunk_optimal(6_000), 2_500); // n/3 = 2000 -> floor
+        assert_eq!(chunk_optimal(30_000), 10_000); // n/3 = 10000
+        assert_eq!(chunk_optimal(40_000), 12_000); // n/3 = 13333 -> ceil
+        assert_eq!(chunk_optimal(50_000), 12_000); // n/3 = 16666 -> ceil
+    }
+
+    #[test]
+    fn chunk_optimal_large_instances_stay_in_small_chunk_band() {
+        // n > 50k: ~n/25, clamped to [2.5k, 7k] — the Pareto-optimal band.
+        assert_eq!(chunk_optimal(60_000), 2_500); // n/25 = 2400 -> floor
+        assert_eq!(chunk_optimal(90_000), 3_600); // n/25 = 3600
+        assert_eq!(chunk_optimal(150_000), 6_000); // n/25 = 6000
+        assert_eq!(chunk_optimal(250_000), 7_000); // n/25 = 10000 -> ceil
+
+        // The big-n regression modes the sweep flagged must never be chosen:
+        // chunks <= 1k (overhead) or >= 19k (weak local search).
+        for n in (60_000..=250_000).step_by(10_000) {
+            let c = chunk_optimal(n);
+            assert!(
+                (2_500..=7_000).contains(&c),
+                "n={n} chose chunk={c} outside the 2.5k-7k band"
+            );
+        }
+    }
+
+    #[test]
+    fn chunk_optimal_never_zero() {
+        // Guards the runner's `points_len() <= max_chunk_size` check and the
+        // `max_chunk_size > 0` validation against a degenerate 0.
+        for n in [0, 1, 2, 100, 2_999, 3_001, 50_001, 1_000_000] {
+            assert!(chunk_optimal(n) > 0, "chunk_optimal({n}) must be > 0");
+        }
     }
 }

@@ -20,3 +20,8 @@ target/
 /benchmark/**/*.tsv
 /benchmark/**/*.log
 !/benchmark/README.md
+# Chunk-size study: commit the results + README (exception to the broad ignore
+# above), but NOT the input fixtures — those are large and regenerated
+# deterministically by scripts/sweep-chunk-explorer.sh from fixed seeds.
+!/benchmark/chunk-size-study/README.md
+!/benchmark/chunk-size-study/results/**

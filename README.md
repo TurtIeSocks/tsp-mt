@@ -176,7 +176,7 @@ Both `--flag value` and `--flag=value` work.
 | `--input <path>`                      | path                |                  `stdin` | Read points from this file instead of stdin; requires UTF-8 `lat,lng` rows    |
 | `--output <path>`                     | path                |                 `stdout` | Write ordered route points to this file instead of stdout                     |
 | `--projection-radius <f64>`           | float               |                   `70.0` | Must be `> 0`                                                                 |
-| `--max-chunk-size <usize>`            | int                 |                   `5000` | Must be `> 0`; above this input size, H3 chunked solver is used               |
+| `--max-chunk-size <usize>`            | int                 |             auto (by `n`) | Must be `> 0`; above this input size, H3 chunked solver is used. If omitted, chosen adaptively from `n` (see `chunk_optimal`, tuned from the chunk-explorer sweep) |
 | `--centroid-order-seed <u64>`         | int                 |                    `999` | Seed for chunk-centroid ordering run                                          |
 | `--centroid-order-max-trials <usize>` | int                 |                  `20000` | LKH `MAX_TRIALS` for centroid ordering                                        |
 | `--centroid-order-time-limit <usize>` | int                 |                     `10` | LKH `TIME_LIMIT` seconds for centroid ordering                                |
