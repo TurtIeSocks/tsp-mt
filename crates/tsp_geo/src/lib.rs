@@ -37,7 +37,7 @@ mod tour;
 
 pub use error::{Error, Result};
 pub use node::GeoPoint;
-pub use solve::{SolverConfig, solve, solve_order, solve_order_of};
+pub use solve::{SolverConfig, refine_order, solve, solve_order, solve_order_of};
 pub use tour::{Tour, TourMetrics};
 
 /// Re-export of the underlying solver crate for advanced configuration.

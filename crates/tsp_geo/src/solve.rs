@@ -12,16 +12,32 @@ use crate::{Error, GeoPoint, Result};
 
 pub use tsp_ils::SolverConfig;
 
-/// Solve the route order for `points`, returning indices into `points`.
-///
-/// Fails if any point has out-of-range or non-finite coordinates.
-pub fn solve_order(points: &[GeoPoint], cfg: &SolverConfig) -> Result<Vec<u32>> {
+fn check_points(points: &[GeoPoint]) -> Result<()> {
     if let Some(bad) = points.iter().position(|p| !p.is_valid()) {
         return Err(Error::invalid_input(alloc::format!(
             "point {bad} has invalid lat/lng values: {}",
             points[bad]
         )));
     }
+    Ok(())
+}
+
+fn is_permutation(tour: &[u32], n: usize) -> bool {
+    if tour.len() != n {
+        return false;
+    }
+    let mut seen = alloc::vec![false; n];
+    tour.iter().all(|&v| {
+        let i = v as usize;
+        i < n && !core::mem::replace(&mut seen[i], true)
+    })
+}
+
+/// Solve the route order for `points`, returning indices into `points`.
+///
+/// Fails if any point has out-of-range or non-finite coordinates.
+pub fn solve_order(points: &[GeoPoint], cfg: &SolverConfig) -> Result<Vec<u32>> {
+    check_points(points)?;
     let pts: Vec<[f64; 3]> = points.iter().map(GeoPoint::unit_sphere_meters).collect();
     let solution = tsp_ils::solve(&pts, cfg);
     log::info!(
@@ -52,6 +68,33 @@ where
 {
     let points: Vec<GeoPoint> = points.into_iter().map(Into::into).collect();
     solve_order(&points, cfg)
+}
+
+/// Refine a caller-supplied visiting order for `points` with the full ILS
+/// pipeline, returning an improved order (indices into `points`).
+///
+/// Fails if any point has out-of-range or non-finite coordinates, or if
+/// `initial_tour` is not a permutation of `0..points.len()`.
+pub fn refine_order(
+    points: &[GeoPoint],
+    initial_tour: &[u32],
+    cfg: &SolverConfig,
+) -> Result<Vec<u32>> {
+    check_points(points)?;
+    if !is_permutation(initial_tour, points.len()) {
+        return Err(Error::invalid_input(alloc::format!(
+            "initial tour is not a permutation of 0..{}",
+            points.len()
+        )));
+    }
+    let pts: Vec<[f64; 3]> = points.iter().map(GeoPoint::unit_sphere_meters).collect();
+    let solution = tsp_ils::refine(&pts, initial_tour, cfg);
+    log::info!(
+        "solver: refined n={} chord_length_m={:.0}",
+        points.len(),
+        solution.length
+    );
+    Ok(solution.tour)
 }
 
 #[cfg(test)]
@@ -129,5 +172,60 @@ mod tests {
             let route = solve(&nodes, &fast_config()).expect("solve");
             assert_eq!(route.len(), n);
         }
+    }
+
+    #[test]
+    fn refine_order_improves_a_scrambled_ring() {
+        let n = 48;
+        let center = (52.52, 13.405);
+        let nodes: Vec<GeoPoint> = (0..n)
+            .map(|i| {
+                let t = i as f64 / n as f64 * std::f64::consts::TAU;
+                GeoPoint::from_lat_lng(center.0 + 0.01 * t.sin(), center.1 + 0.016 * t.cos())
+            })
+            .collect();
+        let scrambled: Vec<u32> = (0..n as u32).map(|i| (i * 11) % n as u32).collect();
+        let tour_len = |order: &[u32]| -> f64 {
+            (0..n)
+                .map(|i| nodes[order[i] as usize].dist(&nodes[order[(i + 1) % n] as usize]))
+                .sum()
+        };
+        let before = tour_len(&scrambled);
+        let refined = super::refine_order(&nodes, &scrambled, &fast_config()).expect("refine");
+        assert_eq!(refined.len(), n);
+        let mut seen = vec![false; n];
+        for &idx in &refined {
+            assert!(!seen[idx as usize]);
+            seen[idx as usize] = true;
+        }
+        assert!(tour_len(&refined) < before, "must shorten a scrambled ring");
+    }
+
+    #[test]
+    fn refine_order_rejects_bad_tour() {
+        let nodes = vec![
+            GeoPoint::from_lat_lng(10.0, 20.0),
+            GeoPoint::from_lat_lng(11.0, 21.0),
+            GeoPoint::from_lat_lng(12.0, 22.0),
+            GeoPoint::from_lat_lng(13.0, 23.0),
+        ];
+        for bad in [vec![0u32, 1, 2], vec![0, 1, 2, 2], vec![0, 1, 2, 9]] {
+            let err = super::refine_order(&nodes, &bad, &fast_config())
+                .expect_err("non-permutation must be rejected");
+            assert!(err.to_string().contains("permutation"), "{err}");
+        }
+    }
+
+    #[test]
+    fn refine_order_rejects_invalid_points() {
+        let nodes = vec![
+            GeoPoint::from_lat_lng(10.0, 20.0),
+            GeoPoint::from_lat_lng(91.0, 20.0),
+            GeoPoint::from_lat_lng(11.0, 21.0),
+            GeoPoint::from_lat_lng(12.0, 22.0),
+        ];
+        let err = super::refine_order(&nodes, &[0, 1, 2, 3], &fast_config())
+            .expect_err("invalid point should fail");
+        assert!(err.to_string().contains("point 1"), "{err}");
     }
 }
