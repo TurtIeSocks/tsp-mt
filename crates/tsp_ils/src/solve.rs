@@ -116,8 +116,9 @@ pub fn solve<const D: usize>(pts: &[[f64; D]], cfg: &SolverConfig) -> Solution {
 
 /// Improve a caller-supplied tour with the same ILS pipeline as [`solve`],
 /// skipping greedy construction for the main walker. `initial_tour` must be
-/// a permutation of `0..pts.len()` (panics otherwise — see [`is_valid_tour`]
-/// -style guarding in higher-level crates for a fallible wrapper).
+/// a permutation of `0..pts.len()`; panics on a wrong length or a
+/// duplicate/out-of-range index. Higher-level crates (e.g. `tsp-geo`)
+/// pre-validate and return an error instead.
 pub fn refine<const D: usize>(
     pts: &[[f64; D]],
     initial_tour: &[u32],
