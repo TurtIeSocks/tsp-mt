@@ -11,16 +11,19 @@ keywords     = ["tsp", "routing", "geo", "latitude", "longitude"]
 categories   = ["algorithms", "science::geo"]
 
 [features]
-default = ["std", "parallel"]
-std      = ["tsp-ils/std", "thiserror/std"]
+default  = ["std", "parallel"]
+std      = ["tsp-ils/std", "thiserror/std", "geo-types?/std"]
 parallel = ["std", "tsp-ils/parallel"]
 libm     = ["dep:libm", "tsp-ils/libm"]
+# Conversions to/from the georust `geo-types` primitives (Coord, Point).
+rustgeo  = ["dep:geo-types"]
 
 [dependencies]
 ryu       = "1.0.23"
 log       = "0.4.29"
 thiserror = { version = "2.0.18", default-features = false }
 libm      = { version = "0.2.11", optional = true }
+geo-types = { version = "0.7.17", optional = true, default-features = false }
 tsp-ils   = { path = "../tsp_ils", version = "0.1.0", default-features = false }
 
 [dev-dependencies]

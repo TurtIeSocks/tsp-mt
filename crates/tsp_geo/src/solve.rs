@@ -41,6 +41,19 @@ pub fn solve(points: &[GeoPoint], cfg: &SolverConfig) -> Result<Vec<GeoPoint>> {
         .collect())
 }
 
+/// [`solve_order`] for anything convertible to [`GeoPoint`] — e.g. with the
+/// `rustgeo` feature, iterators of `geo_types::Point` / `geo_types::Coord`
+/// (or references to them) feed in directly. Returns indices in iteration
+/// order.
+pub fn solve_order_of<I>(points: I, cfg: &SolverConfig) -> Result<Vec<u32>>
+where
+    I: IntoIterator,
+    I::Item: Into<GeoPoint>,
+{
+    let points: Vec<GeoPoint> = points.into_iter().map(Into::into).collect();
+    solve_order(&points, cfg)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{SolverConfig, solve, solve_order};

@@ -18,6 +18,10 @@
 //! ];
 //! let route = solve(&points, &SolverConfig::default()).unwrap();
 //! ```
+//!
+//! With the `rustgeo` feature, georust [`geo-types`](https://docs.rs/geo-types)
+//! values (`Coord`, `Point`) convert to and from [`GeoPoint`], and
+//! [`solve_order_of`] accepts iterators of them directly.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -26,12 +30,14 @@ extern crate alloc;
 mod error;
 mod fmath;
 mod node;
+#[cfg(feature = "rustgeo")]
+mod rustgeo;
 mod solve;
 mod tour;
 
 pub use error::{Error, Result};
 pub use node::GeoPoint;
-pub use solve::{SolverConfig, solve, solve_order};
+pub use solve::{SolverConfig, solve, solve_order, solve_order_of};
 pub use tour::{Tour, TourMetrics};
 
 /// Re-export of the underlying solver crate for advanced configuration.

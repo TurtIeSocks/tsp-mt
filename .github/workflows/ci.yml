@@ -77,6 +77,9 @@ jobs:
       - name: Run tests (sequential, no rayon)
         run: cargo test -p tsp-ils --no-default-features --features std
 
+      - name: Run tests (rustgeo interop)
+        run: cargo test -p tsp-geo --features rustgeo
+
   targets:
     name: Feature/target matrix
     runs-on: ubuntu-latest
@@ -105,4 +108,4 @@ jobs:
       - name: no_std (bare metal)
         run: |
           cargo build -p tsp-ils --no-default-features --features libm --target thumbv7em-none-eabihf
-          cargo build -p tsp-geo --no-default-features --features libm --target thumbv7em-none-eabihf
+          cargo build -p tsp-geo --no-default-features --features libm,rustgeo --target thumbv7em-none-eabihf
