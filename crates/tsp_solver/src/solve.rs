@@ -47,6 +47,11 @@ pub struct SolverConfig {
     pub max_segment_len: usize,
     /// Cap on segments per thread at the fine end of the schedule.
     pub segments_per_thread: usize,
+    /// When a round has fewer segments than threads, each segment is solved
+    /// up to this many times in parallel with different perturbation seeds
+    /// and the best result wins ("best-of-k"). Uses otherwise-idle cores at
+    /// the coarse end of the schedule; can only improve a round. `1` = off.
+    pub max_segment_replicas: usize,
     /// Double-bridge kick span in tour positions. `0` = auto.
     pub kick_window: usize,
     /// Longest Or-opt segment during spike repair.
@@ -68,6 +73,7 @@ impl Default for SolverConfig {
             min_segment_len: 3_000,
             max_segment_len: 50_000,
             segments_per_thread: 4,
+            max_segment_replicas: 16,
             kick_window: 0,
             spike_or_opt_len: 12,
             spike_factor: 3.0,
@@ -241,6 +247,9 @@ fn segment_rounds<const D: usize>(
     const MAX_KICK_SCALE: usize = 64;
     loop {
         let bounds = segment_bounds(n, seg_count, round);
+        // Idle cores run redundant solves of the same segments (different
+        // kick seeds, best result wins) instead of sitting out the round.
+        let replicas = (threads / bounds.len()).clamp(1, cfg.max_segment_replicas.max(1));
         let mut pos = vec![0u32; n];
         for (i, &v) in order.iter().enumerate() {
             pos[v as usize] = i as u32;
@@ -263,6 +272,7 @@ fn segment_rounds<const D: usize>(
                     round,
                     seg_idx as u64,
                     kick_scale,
+                    replicas,
                     rounds_deadline.min(deadline),
                 );
                 (lo, path)
@@ -304,8 +314,9 @@ fn segment_rounds<const D: usize>(
 }
 
 /// Extract the tour segment starting at global position `lo`, optimize it as
-/// an open path with fixed endpoints, and return the improved path in global
-/// node ids.
+/// an open path with fixed endpoints (up to `replicas` independent attempts
+/// in parallel, shortest wins), and return the improved path in global node
+/// ids.
 #[allow(clippy::too_many_arguments)]
 fn solve_segment<const D: usize>(
     pts: &[[f64; D]],
@@ -318,6 +329,7 @@ fn solve_segment<const D: usize>(
     round: u64,
     seg_idx: u64,
     kick_scale: usize,
+    replicas: usize,
     deadline: Instant,
 ) -> Vec<u32> {
     let n = order.len();
@@ -338,23 +350,35 @@ fn solve_segment<const D: usize>(
         })
         .collect();
     let local_cand = Candidates::from_lists(lists);
-    let local_order: Vec<u32> = (0..seg_len as u32).collect();
     let frozen = Some((seg_len as u32 - 1, 0));
-    let rng = SplitMix64::derive(cfg.seed, round.wrapping_mul(0x9E37) ^ 0xA11CE, seg_idx);
-    let mut st = TourState::new(
-        &local_pts,
-        &local_cand,
-        local_order,
-        frozen,
-        cfg.or_opt_max_len,
-        cfg.kick_window_for(seg_len),
-        rng,
-    );
     let kicks = (seg_len / 4).max(32).saturating_mul(kick_scale);
-    st.optimize(deadline, kicks);
 
-    st.path_from(0, seg_len as u32 - 1)
-        .into_iter()
+    // Replica 0 uses the same RNG stream as a replica-free run, so best-of-k
+    // is never worse than solving the segment once.
+    let (_, _, path) = (0..replicas.max(1) as u64)
+        .into_par_iter()
+        .map(|rep| {
+            let rng = SplitMix64::derive(
+                cfg.seed,
+                round.wrapping_mul(0x9E37) ^ 0xA11CE,
+                seg_idx | (rep << 32),
+            );
+            let mut st = TourState::new(
+                &local_pts,
+                &local_cand,
+                (0..seg_len as u32).collect(),
+                frozen,
+                cfg.or_opt_max_len,
+                cfg.kick_window_for(seg_len),
+                rng,
+            );
+            st.optimize(deadline, kicks);
+            (st.cur_len, rep, st.path_from(0, seg_len as u32 - 1))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
+        .expect("at least one replica");
+
+    path.into_iter()
         .map(|local| globals[local as usize])
         .collect()
 }
