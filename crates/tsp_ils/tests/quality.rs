@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use tsp_solver::{SolverConfig, cycle_length, solve};
+use tsp_ils::{SolverConfig, cycle_length, solve};
 
 fn cfg(seconds: f64) -> SolverConfig {
     SolverConfig {
@@ -18,7 +18,7 @@ fn cfg(seconds: f64) -> SolverConfig {
 fn held_karp(pts: &[[f64; 2]]) -> f64 {
     let n = pts.len();
     assert!((2..=15).contains(&n));
-    let d = |a: usize, b: usize| tsp_solver::dist(&pts[a], &pts[b]);
+    let d = |a: usize, b: usize| tsp_ils::dist(&pts[a], &pts[b]);
     let full = 1usize << (n - 1);
     // dp[mask][j]: shortest path from node 0 visiting exactly the nodes in
     // mask (over nodes 1..n), ending at node j+1.
@@ -102,7 +102,7 @@ fn solves_unit_grid_near_optimally() {
     // grid tour (allows a few diagonal stitches).
     let long_edges = (0..n)
         .filter(|&i| {
-            tsp_solver::dist(
+            tsp_ils::dist(
                 &pts[sol.tour[i] as usize],
                 &pts[sol.tour[(i + 1) % n] as usize],
             ) > 3.0

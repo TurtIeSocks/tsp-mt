@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
 members = [
-  "crates/tsp_mt_core",
+  "crates/tsp_geo",
   "crates/tsp_mt_derive",
-  "crates/tsp_solver",
+  "crates/tsp_ils",
 ]
 
 [package]
@@ -18,8 +18,8 @@ categories  = ["algorithms", "command-line-utilities"]
 
 [dependencies]
 log           = "0.4.29"
-tsp_mt_core   = { path = "crates/tsp_mt_core" }
-tsp_mt_derive = { path = "crates/tsp_mt_derive" }
+tsp-geo       = { path = "crates/tsp_geo", version = "0.2.0" }
+tsp_mt_derive = { path = "crates/tsp_mt_derive", version = "0.1.0" }
 
 [profile.dev.package."*"]
 opt-level = 3

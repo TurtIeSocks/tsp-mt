@@ -29,9 +29,9 @@ pub fn solve(input: SolverInput, options: &SolverOptions) -> Result<Vec<GeoPoint
     let nodes = input.nodes;
     let pts: Vec<[f64; 3]> = nodes.iter().map(GeoPoint::unit_sphere_meters).collect();
 
-    let defaults = tsp_solver::SolverConfig::default();
+    let defaults = tsp_ils::SolverConfig::default();
     let max_neighbors = options.max_neighbors.max(4);
-    let cfg = tsp_solver::SolverConfig {
+    let cfg = tsp_ils::SolverConfig {
         time_limit: (options.time_limit > 0.0).then(|| Duration::from_secs_f64(options.time_limit)),
         seed: options.seed,
         threads: options.threads,
@@ -40,7 +40,7 @@ pub fn solve(input: SolverInput, options: &SolverOptions) -> Result<Vec<GeoPoint
         ..defaults
     };
 
-    let solution = tsp_solver::solve(&pts, &cfg);
+    let solution = tsp_ils::solve(&pts, &cfg);
     log::info!(
         "solver: n={} chord_length_m={:.0}",
         nodes.len(),

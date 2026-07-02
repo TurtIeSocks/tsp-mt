@@ -32,6 +32,6 @@ the Beardwood–Halton–Hammersley estimate on uniform random instances, or
 solves a TSPLIB `NODE_COORD_SECTION` file:
 
 ```bash
-cargo run --release -p tsp_solver --example bench -- 100000 30 0
-cargo run --release -p tsp_solver --example bench -- path/to/instance.tsp 30 0
+cargo run --release -p tsp-ils --example bench -- 100000 30 0
+cargo run --release -p tsp-ils --example bench -- path/to/instance.tsp 30 0
 ```

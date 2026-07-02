@@ -309,24 +309,32 @@ dependencies = [
 ]
 
 [[package]]
-name = "tsp-mt"
-version = "0.2.0"
-dependencies = [
- "log",
- "tsp_mt_core",
- "tsp_mt_derive",
-]
-
-[[package]]
-name = "tsp_mt_core"
+name = "tsp-geo"
 version = "0.2.0"
 dependencies = [
  "env_logger",
  "log",
  "ryu",
  "thiserror",
+ "tsp-ils",
  "tsp_mt_derive",
- "tsp_solver",
+]
+
+[[package]]
+name = "tsp-ils"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "rayon",
+]
+
+[[package]]
+name = "tsp-mt"
+version = "0.2.0"
+dependencies = [
+ "log",
+ "tsp-geo",
+ "tsp_mt_derive",
 ]
 
 [[package]]
@@ -336,14 +344,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "tsp_solver"
-version = "0.1.0"
-dependencies = [
- "log",
- "rayon",
 ]
 
 [[package]]

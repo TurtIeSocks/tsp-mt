@@ -1,4 +1,4 @@
-//! # tsp_solver
+//! # tsp_ils
 //!
 //! A clean-room, multi-core TSP heuristic in pure Rust.
 //!

@@ -1,5 +1,5 @@
 [package]
-name        = "tsp_mt_core"
+name        = "tsp-geo"
 version     = "0.2.0"
 edition     = "2024"
 description = "Core solver library for tsp-mt"
@@ -13,5 +13,5 @@ ryu           = "1.0.23"
 log           = "0.4.29"
 env_logger    = "0.11.9"
 thiserror     = "2.0.18"
-tsp_mt_derive = { path = "../tsp_mt_derive" }
-tsp_solver    = { path = "../tsp_solver" }
+tsp_mt_derive = { path = "../tsp_mt_derive", version = "0.1.0" }
+tsp-ils       = { path = "../tsp_ils", version = "0.1.0" }

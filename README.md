@@ -12,7 +12,7 @@ fully self-contained in Rust — no external solver binary required.
 
 ## How It Works
 
-The solver (crate `tsp_solver`) is an original implementation of well-published
+The solver (crate `tsp_ils`) is an original implementation of well-published
 techniques from the Lin–Kernighan family of TSP heuristics. It contains no code
 from LKH or any other solver — only the ideas, implemented from the literature
 (Lin & Kernighan 1973; Or 1976; Bentley 1992; Helsgaun 2000):
@@ -140,10 +140,10 @@ Planar quality benchmark against the Beardwood–Halton–Hammersley estimate
 
 ```bash
 # n points, seconds, threads
-cargo run --release -p tsp_solver --example bench -- 100000 30 0
+cargo run --release -p tsp-ils --example bench -- 100000 30 0
 
 # or a TSPLIB file (NODE_COORD_SECTION / EUC_2D)
-cargo run --release -p tsp_solver --example bench -- path/to/instance.tsp 30 0
+cargo run --release -p tsp-ils --example bench -- path/to/instance.tsp 30 0
 ```
 
 End-to-end geographic benchmark:

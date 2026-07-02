@@ -1,8 +1,8 @@
 //! Quality/scaling benchmark for the solver.
 //!
 //! Usage:
-//!   cargo run --release -p tsp_solver --example bench -- [n] [seconds] [threads] [k] [oropt] [min_seg]
-//!   cargo run --release -p tsp_solver --example bench -- <file.tsp> [seconds] [threads] [k] [oropt] [min_seg]
+//!   cargo run --release -p tsp_ils --example bench -- [n] [seconds] [threads] [k] [oropt] [min_seg]
+//!   cargo run --release -p tsp_ils --example bench -- <file.tsp> [seconds] [threads] [k] [oropt] [min_seg]
 //!
 //! With a numeric first argument, benchmarks `n` uniform random points in a
 //! square and reports the gap against the Beardwood-Halton-Hammersley
@@ -12,7 +12,7 @@
 
 use std::time::{Duration, Instant};
 
-use tsp_solver::{SolverConfig, cycle_length, solve};
+use tsp_ils::{SolverConfig, cycle_length, solve};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -85,7 +85,7 @@ fn count_spikes(pts: &[[f64; 2]], tour: &[u32], threshold: f64) -> usize {
     let n = tour.len();
     (0..n)
         .filter(|&i| {
-            tsp_solver::dist(&pts[tour[i] as usize], &pts[tour[(i + 1) % n] as usize]) > threshold
+            tsp_ils::dist(&pts[tour[i] as usize], &pts[tour[(i + 1) % n] as usize]) > threshold
         })
         .count()
 }

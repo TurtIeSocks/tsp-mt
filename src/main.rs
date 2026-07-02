@@ -5,7 +5,7 @@ use std::{
 
 use log::info;
 
-use tsp_mt_core::{GeoPoint, Result, SolverInput, SolverOptions, Tour, logging, solver};
+use tsp_geo::{GeoPoint, Result, SolverInput, SolverOptions, Tour, logging, solver};
 
 fn main() -> Result<()> {
     if std::env::args()

@@ -1,5 +1,5 @@
 [package]
-name        = "tsp_solver"
+name        = "tsp-ils"
 version     = "0.1.0"
 edition     = "2024"
 description = "Clean-room multi-core TSP heuristic: candidate-list local search (2-opt + Or-opt) with greedy construction, don't-look bits, and parallel segment-based iterated local search"
