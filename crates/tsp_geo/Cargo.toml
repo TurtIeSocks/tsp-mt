@@ -16,7 +16,7 @@ std      = ["tsp-ils/std", "thiserror/std", "geo-types?/std"]
 parallel = ["std", "tsp-ils/parallel"]
 libm     = ["dep:libm", "tsp-ils/libm"]
 # Conversions to/from the georust `geo-types` primitives (Coord, Point).
-rustgeo  = ["dep:geo-types"]
+geo-types = ["dep:geo-types"]
 
 [dependencies]
 ryu       = "1.0.23"

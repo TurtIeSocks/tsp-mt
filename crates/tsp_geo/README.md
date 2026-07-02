@@ -28,9 +28,9 @@ let order = solve_order(&points, &SolverConfig::default()).unwrap();
 `Tour::tour_metrics` reports haversine totals, average edge, and
 outlier-spike counts for a solved route.
 
-### georust interop (`rustgeo` feature)
+### georust interop (`geo-types` feature)
 
-With the `rustgeo` feature, [`geo-types`](https://docs.rs/geo-types)
+With the `geo-types` feature, [`geo-types`](https://docs.rs/geo-types)
 primitives convert to and from `GeoPoint`, and `solve_order_of` accepts any
 iterator of convertible items — `Point`s, `Coord`s, references to either,
 or a `LineString`'s `.points()`:
@@ -52,8 +52,8 @@ let order = solve_order_of(stops.iter().copied(), &SolverConfig::default()).unwr
 - `std` *(default)* — OS clock for wall-time budgets.
 - `parallel` *(default, implies `std`)* — multi-core via rayon.
 - `libm` — pure-Rust float math for `no_std` builds (requires `alloc`).
-- `rustgeo` — `From` conversions for georust `geo-types` (`Coord`, `Point`);
-  composes with every other feature, including `no_std`.
+- `geo-types` — `From` conversions for georust `geo-types` (`Coord`,
+  `Point`); composes with every other feature, including `no_std`.
 
 For WebAssembly notes (sequential builds vs. wasm-bindgen-rayon threads),
 see the [`tsp-ils` README](https://crates.io/crates/tsp-ils).

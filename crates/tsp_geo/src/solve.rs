@@ -42,7 +42,7 @@ pub fn solve(points: &[GeoPoint], cfg: &SolverConfig) -> Result<Vec<GeoPoint>> {
 }
 
 /// [`solve_order`] for anything convertible to [`GeoPoint`] — e.g. with the
-/// `rustgeo` feature, iterators of `geo_types::Point` / `geo_types::Coord`
+/// `geo-types` feature, iterators of `geo_types::Point` / `geo_types::Coord`
 /// (or references to them) feed in directly. Returns indices in iteration
 /// order.
 pub fn solve_order_of<I>(points: I, cfg: &SolverConfig) -> Result<Vec<u32>>

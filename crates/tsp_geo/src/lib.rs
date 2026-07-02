@@ -19,7 +19,7 @@
 //! let route = solve(&points, &SolverConfig::default()).unwrap();
 //! ```
 //!
-//! With the `rustgeo` feature, georust [`geo-types`](https://docs.rs/geo-types)
+//! With the `geo-types` feature, georust [`geo-types`](https://docs.rs/geo-types)
 //! values (`Coord`, `Point`) convert to and from [`GeoPoint`], and
 //! [`solve_order_of`] accepts iterators of them directly.
 
@@ -29,9 +29,9 @@ extern crate alloc;
 
 mod error;
 mod fmath;
+#[cfg(feature = "geo-types")]
+mod geo_types;
 mod node;
-#[cfg(feature = "rustgeo")]
-mod rustgeo;
 mod solve;
 mod tour;
 

@@ -1,5 +1,5 @@
 //! Conversions to/from the georust [`geo-types`](https://docs.rs/geo-types)
-//! primitives, enabled by the `rustgeo` feature.
+//! primitives, enabled by the `geo-types` feature.
 //!
 //! Both libraries use the same axis convention (`x` = longitude,
 //! `y` = latitude), so conversions are direct field copies.
@@ -23,7 +23,7 @@
 //! # assert_eq!(route.0.len(), 3);
 //! ```
 
-use geo_types::{Coord, Point};
+use ::geo_types::{Coord, Point};
 
 use crate::GeoPoint;
 
@@ -68,7 +68,7 @@ mod tests {
     use alloc::vec;
     use alloc::vec::Vec;
 
-    use geo_types::{Coord, LineString, MultiPoint, Point};
+    use ::geo_types::{Coord, LineString, MultiPoint, Point};
 
     use crate::{GeoPoint, SolverConfig, solve_order_of};
 
