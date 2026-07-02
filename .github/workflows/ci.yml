@@ -73,3 +73,39 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace --all-targets
+
+      - name: Run tests (sequential, no rayon)
+        run: cargo test -p tsp-ils --no-default-features --features std
+
+      - name: Run tests (geo-types interop)
+        run: cargo test -p tsp-geo --features geo-types
+
+  targets:
+    name: Feature/target matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown, thumbv7em-none-eabihf
+
+      - name: Cache Cargo + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-workspace-crates: true
+          workspaces: |
+            . -> target
+
+      - name: wasm32 sequential (browser without COOP/COEP)
+        run: cargo build -p tsp-geo --no-default-features --features std --target wasm32-unknown-unknown
+
+      - name: wasm32 parallel (wasm-bindgen-rayon hosts)
+        run: cargo build -p tsp-geo --target wasm32-unknown-unknown
+
+      - name: no_std (bare metal)
+        run: |
+          cargo build -p tsp-ils --no-default-features --features libm --target thumbv7em-none-eabihf
+          cargo build -p tsp-geo --no-default-features --features libm,geo-types --target thumbv7em-none-eabihf

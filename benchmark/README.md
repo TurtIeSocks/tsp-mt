@@ -2,53 +2,36 @@
 
 This project uses a single benchmark root directory with dedicated subfolders:
 
-- `benchmark/inputs/`: place all benchmark input `.txt` files here.
-- `benchmark/outputs/`: benchmark run stdout route outputs.
+- `benchmark/inputs/`: benchmark input `.txt` files (`lat,lng` per line).
+- `benchmark/outputs/`: benchmark run route outputs.
 - `benchmark/logs/`: benchmark run stderr logs.
-- `benchmark/results/`: generated summary/report artifacts (`.tsv` and `.md`).
+- `benchmark/results/`: generated summary artifacts (`.tsv`).
 
-## Input Discovery
-
-`scripts/benchmark-max-chunk-size.sh` automatically discovers inputs from:
-
-- `benchmark/inputs/*.txt` (sorted lexicographically)
-
-If no `.txt` files are present, the script exits with an error.
-
-## Per-Input Short-Circuit
-
-For each input file, the script computes `n` as the number of non-empty lines.
-
-Chunk-size runs short-circuit per input: after the first completed run where
-`chunk_size > n`, that input stops and the script moves to the next input.
-
-Example with `n = 1200`:
-- runs `900`, `1000`, `1500`
-- then stops that input (does not run larger chunk sizes)
-
-## Run Benchmark
+## End-to-end geographic benchmark
 
 ```bash
-./scripts/benchmark-max-chunk-size.sh
+./scripts/benchmark.sh [time_limit_seconds]
 ```
 
-By default, each run uses a UTC timestamp (format `YYYYMMDDTHHMMSSZ`) in output file names to prevent overwriting:
+- Discovers inputs from `benchmark/inputs/*.txt`; if none exist, generates
+  clustered instances of 1k/5k/20k/100k points first.
+- Runs the release binary on each input and records the metrics line
+  (total distance, longest edge, average edge, spike count) plus wall time
+  into `benchmark/results/benchmark-<timestamp>.tsv`.
+- `time_limit_seconds` defaults to `0` (auto: scales with input size).
 
-- `benchmark/outputs/*-<chunk>-<timestamp>.txt`
-- `benchmark/logs/*-<chunk>-<timestamp>.stderr.log`
-- `benchmark/results/chunk-size-benchmark-<timestamp>-summary.tsv`
-- `benchmark/results/chunk-size-benchmark-<timestamp>-parsed.tsv`
-- `benchmark/results/chunk-size-benchmark-<timestamp>-report.md`
+Optional environment variables:
 
-## Regenerate Report Only
+- `TSP_MT_BENCH_TIMESTAMP=<timestamp>`: override the timestamp used in
+  generated file names.
 
-To regenerate parsed/report files from an existing summary without re-running benchmarks:
+## Planar quality benchmark (optimality gap)
+
+The core solver crate has a standalone benchmark that reports the gap against
+the Beardwood–Halton–Hammersley estimate on uniform random instances, or
+solves a TSPLIB `NODE_COORD_SECTION` file:
 
 ```bash
-TSP_MT_REPORT_ONLY=1 ./scripts/benchmark-max-chunk-size.sh benchmark/results/chunk-size-benchmark-<timestamp>-summary.tsv
+cargo run --release -p tsp-ils --example bench -- 100000 30 0
+cargo run --release -p tsp-ils --example bench -- path/to/instance.tsp 30 0
 ```
-
-## Optional Environment Variables
-
-- `TSP_MT_REPORT_ONLY=1`: skip benchmark execution and only build parsed/report artifacts.
-- `TSP_MT_BENCH_TIMESTAMP=<timestamp>`: override the timestamp used in generated file names.

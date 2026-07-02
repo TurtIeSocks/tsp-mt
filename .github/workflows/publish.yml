@@ -1,0 +1,80 @@
+name: Publish
+
+# Publishes the library crates (tsp-ils, tsp-geo) to crates.io when a
+# version tag is pushed:
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# The tsp-mt binary and tsp_mt_derive are repo-only (publish = false).
+#
+# Requirements:
+#   - The tag must match the version of at least one publishable crate,
+#     so a stale or typo'd tag cannot trigger a release.
+#   - A crates.io API token stored as the `CARGO_REGISTRY_TOKEN` repository
+#     secret (crates.io -> Account Settings -> API Tokens, scope
+#     publish-new + publish-update).
+#
+# Crates are published in dependency order; versions that already exist on
+# crates.io are skipped, so a release that bumps only one crate works.
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-workspace-crates: true
+          workspaces: |
+            . -> target
+
+      - name: Check tag matches a publishable crate version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          versions="$(cargo metadata --format-version 1 --no-deps \
+            | jq -r '.packages[] | select(.name == "tsp-ils" or .name == "tsp-geo") | .version')"
+          if ! grep -qx "$tag" <<< "$versions"; then
+            echo "::error::Tag v$tag matches neither tsp-ils nor tsp-geo (versions: $(echo $versions))" >&2
+            exit 1
+          fi
+
+      - name: Run tests
+        run: cargo test --workspace --all-targets
+
+      - name: Publish (dependency order, skip existing versions)
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          metadata="$(cargo metadata --format-version 1 --no-deps)"
+          # Leaf-first so tsp-geo can resolve the just-published tsp-ils;
+          # `cargo publish` blocks until the index has the new version.
+          for crate in tsp-ils tsp-geo; do
+            version="$(jq -r ".packages[] | select(.name == \"$crate\") | .version" <<< "$metadata")"
+            if [ -z "$version" ] || [ "$version" = "null" ]; then
+              echo "::error::could not resolve version for $crate" >&2
+              exit 1
+            fi
+            if curl -sSfL -A "tsp-mt-release (github actions)" \
+              "https://crates.io/api/v1/crates/$crate/$version" > /dev/null 2>&1; then
+              echo "$crate@$version already on crates.io — skipping"
+              continue
+            fi
+            echo "Publishing $crate@$version"
+            cargo publish -p "$crate"
+          done
