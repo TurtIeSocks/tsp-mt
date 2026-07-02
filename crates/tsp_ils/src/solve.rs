@@ -111,9 +111,30 @@ pub struct Solution {
 }
 
 pub fn solve<const D: usize>(pts: &[[f64; D]], cfg: &SolverConfig) -> Solution {
+    solve_with(pts, cfg, None)
+}
+
+/// Improve a caller-supplied tour with the same ILS pipeline as [`solve`],
+/// skipping greedy construction for the main walker. `initial_tour` must be
+/// a permutation of `0..pts.len()` (panics otherwise — see [`is_valid_tour`]
+/// -style guarding in higher-level crates for a fallible wrapper).
+pub fn refine<const D: usize>(
+    pts: &[[f64; D]],
+    initial_tour: &[u32],
+    cfg: &SolverConfig,
+) -> Solution {
+    assert_valid_tour(initial_tour, pts.len());
+    solve_with(pts, cfg, Some(initial_tour.to_vec()))
+}
+
+fn solve_with<const D: usize>(
+    pts: &[[f64; D]],
+    cfg: &SolverConfig,
+    seed_tour: Option<Vec<u32>>,
+) -> Solution {
     let n = pts.len();
     if n <= 3 {
-        let tour: Vec<u32> = (0..n as u32).collect();
+        let tour = seed_tour.unwrap_or_else(|| (0..n as u32).collect());
         let length = cycle_length(pts, &tour);
         return Solution { tour, length };
     }
@@ -126,10 +147,29 @@ pub fn solve<const D: usize>(pts: &[[f64; D]], cfg: &SolverConfig) -> Solution {
         .num_threads(cfg.threads)
         .build()
     {
-        Ok(pool) => return pool.install(|| solve_inner(pts, cfg)),
+        Ok(pool) => return pool.install(move || solve_inner(pts, cfg, seed_tour)),
         Err(err) => log::warn!("solver: thread pool build failed ({err}); using global pool"),
     }
-    solve_inner(pts, cfg)
+    solve_inner(pts, cfg, seed_tour)
+}
+
+/// Panics when `tour` is not a permutation of `0..n`.
+fn assert_valid_tour(tour: &[u32], n: usize) {
+    assert_eq!(
+        tour.len(),
+        n,
+        "initial tour length {} != point count {n}; not a permutation",
+        tour.len()
+    );
+    let mut seen = vec![false; n];
+    for &v in tour {
+        let i = v as usize;
+        assert!(
+            i < n && !seen[i],
+            "initial tour is not a permutation of 0..{n}"
+        );
+        seen[i] = true;
+    }
 }
 
 /// Worker count visible to the orchestration heuristics.
@@ -144,7 +184,11 @@ fn worker_count() -> usize {
     }
 }
 
-fn solve_inner<const D: usize>(pts: &[[f64; D]], cfg: &SolverConfig) -> Solution {
+fn solve_inner<const D: usize>(
+    pts: &[[f64; D]],
+    cfg: &SolverConfig,
+    seed_tour: Option<Vec<u32>>,
+) -> Solution {
     let n = pts.len();
     let start = Instant::now();
     let deadline = start + cfg.budget(n);
@@ -157,19 +201,30 @@ fn solve_inner<const D: usize>(pts: &[[f64; D]], cfg: &SolverConfig) -> Solution
         start.elapsed().as_secs_f64()
     );
 
-    let initial = greedy_tour(pts, &cand, &tree);
-    log::info!(
-        "solver: greedy tour len={:.0} in {:.2}s",
-        cycle_length(pts, &initial),
-        start.elapsed().as_secs_f64()
-    );
-
     let seg_capable = n / cfg.min_segment_len.max(4) >= 2;
+    let use_segments = n > cfg.multi_start_max && seg_capable;
 
-    let mut order = if n <= cfg.multi_start_max || !seg_capable {
-        multi_start(pts, &cand, initial, cfg, deadline)
-    } else {
-        segment_rounds(pts, &cand, initial, cfg, deadline)
+    let mut order = match seed_tour {
+        // Segment rounds refine the seed directly; greedy is never built.
+        Some(seed) if use_segments => segment_rounds(pts, &cand, seed, cfg, deadline),
+        // Multi-start: walker 0 refines the seed, the rest explore from greedy.
+        Some(seed) => {
+            let greedy = greedy_tour(pts, &cand, &tree);
+            multi_start(pts, &cand, seed, greedy, cfg, deadline)
+        }
+        None => {
+            let greedy = greedy_tour(pts, &cand, &tree);
+            log::info!(
+                "solver: greedy tour len={:.0} in {:.2}s",
+                cycle_length(pts, &greedy),
+                start.elapsed().as_secs_f64()
+            );
+            if use_segments {
+                segment_rounds(pts, &cand, greedy, cfg, deadline)
+            } else {
+                multi_start(pts, &cand, greedy.clone(), greedy, cfg, deadline)
+            }
+        }
     };
 
     // Final sequential polish + spike repair on the whole tour.
@@ -200,10 +255,12 @@ fn solve_inner<const D: usize>(pts: &[[f64; D]], cfg: &SolverConfig) -> Solution
 }
 
 /// One independent iterated-local-search walker per core; best tour wins.
+/// Walker 0 starts from `primary`, all other walkers from `alt`.
 fn multi_start<const D: usize>(
     pts: &[[f64; D]],
     cand: &Candidates,
-    initial: Vec<u32>,
+    primary: Vec<u32>,
+    alt: Vec<u32>,
     cfg: &SolverConfig,
     deadline: Instant,
 ) -> Vec<u32> {
@@ -218,10 +275,11 @@ fn multi_start<const D: usize>(
     };
     let walker = |run: usize| {
         let rng = SplitMix64::derive(cfg.seed, 0x5EED, run as u64);
+        let start_tour = if run == 0 { primary.clone() } else { alt.clone() };
         let mut st = TourState::new(
             pts,
             cand,
-            initial.clone(),
+            start_tour,
             None,
             cfg.or_opt_max_len,
             cfg.kick_window_for(n),

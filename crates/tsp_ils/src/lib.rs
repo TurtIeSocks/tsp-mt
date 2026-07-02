@@ -59,7 +59,7 @@ mod solve;
 mod state;
 
 pub use kdtree::dist;
-pub use solve::{Solution, SolverConfig, cycle_length, solve};
+pub use solve::{Solution, SolverConfig, cycle_length, refine, solve};
 
 #[cfg(test)]
 mod tests {
@@ -127,5 +127,40 @@ mod tests {
         assert_permutation(&sol.tour, pts.len());
         let recomputed = cycle_length(&pts, &sol.tour);
         assert!((recomputed - sol.length).abs() < 1e-6 * recomputed.max(1.0));
+    }
+
+    #[test]
+    fn refine_returns_permutation_and_never_worsens() {
+        // 64 points on a circle; scrambled-but-valid initial tour (27 coprime 64).
+        let pts: Vec<[f64; 2]> = (0..64)
+            .map(|i| {
+                let t = i as f64 / 64.0 * core::f64::consts::TAU;
+                [t.sin(), t.cos()]
+            })
+            .collect();
+        let initial: Vec<u32> = (0..64u32).map(|i| (i * 27) % 64).collect();
+        let before = cycle_length(&pts, &initial);
+        let sol = refine(&pts, &initial, &fast_cfg());
+        assert_permutation(&sol.tour, 64);
+        assert!(sol.length <= before + 1e-9, "refine must not worsen the tour");
+        // Circle optimum is the perimeter; ILS should recover it from a scramble.
+        let perimeter: f64 = (0..64)
+            .map(|i| dist(&pts[i], &pts[(i + 1) % 64]))
+            .sum();
+        assert!(sol.length <= perimeter * 1.001, "got {} want ~{perimeter}", sol.length);
+    }
+
+    #[test]
+    fn refine_tiny_input_passes_through() {
+        let pts = [[0.0, 0.0], [1.0, 0.0], [0.5, 1.0]];
+        let sol = refine(&pts, &[2, 0, 1], &fast_cfg());
+        assert_eq!(sol.tour, vec![2, 0, 1]);
+    }
+
+    #[test]
+    #[should_panic(expected = "permutation")]
+    fn refine_rejects_non_permutation() {
+        let pts = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
+        refine(&pts, &[0, 1, 2, 2], &fast_cfg());
     }
 }
