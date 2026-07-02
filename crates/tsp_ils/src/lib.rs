@@ -29,10 +29,31 @@
 //! other existing TSP solver. It works on points in any const-generic
 //! dimension `D`; geographic callers typically embed lat/lng on the unit
 //! sphere (D=3, chord metric), planar callers use D=2.
+//!
+//! ## Features
+//!
+//! * `std` (default) — OS clock for wall-time budgets.
+//! * `parallel` (default, implies `std`) — multi-core segment rounds,
+//!   replicas, and multi-start via rayon. On `wasm32` the crate uses rayon's
+//!   global pool, which the host must initialize (e.g. wasm-bindgen-rayon);
+//!   without that, build with `--no-default-features --features std` for a
+//!   fully sequential solver that needs no cross-origin-isolation setup.
+//! * `libm` — pure-Rust float math; required for `no_std` builds
+//!   (`--no-default-features --features libm`). Without a clock, time limits
+//!   are ignored and the solver stops on convergence and finite kick budgets,
+//!   which also makes results bit-reproducible.
+
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+#[cfg(all(not(feature = "std"), not(feature = "libm")))]
+compile_error!("tsp-ils requires either the `std` feature or the `libm` feature");
 
 mod candidates;
 mod construct;
 mod kdtree;
+mod platform;
 mod rng;
 mod solve;
 mod state;

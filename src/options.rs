@@ -5,6 +5,10 @@ use tsp_mt_derive::{CliOptions, CliValue, KvDisplay};
 
 use crate::{Error, Result};
 
+/// Anything above this is treated as invalid rather than fed to
+/// `Duration::from_secs_f64`, which panics on huge or non-finite values.
+const MAX_TIME_LIMIT_SECS: f64 = 1e9;
+
 /// Runtime options for the built-in solver.
 #[derive(Clone, Debug, CliOptions, KvDisplay)]
 pub struct SolverOptions {
@@ -197,6 +201,29 @@ impl SolverOptions {
         )
     }
 
+    /// Translate CLI options into a solver configuration, validating ranges
+    /// that would otherwise panic downstream (`Duration::from_secs_f64`).
+    pub fn to_config(&self) -> Result<tsp_geo::SolverConfig> {
+        if !self.time_limit.is_finite()
+            || self.time_limit < 0.0
+            || self.time_limit > MAX_TIME_LIMIT_SECS
+        {
+            return Err(Error::invalid_input(format!(
+                "--time-limit must be a finite number of seconds in [0, {MAX_TIME_LIMIT_SECS:.0}], got {}",
+                self.time_limit
+            )));
+        }
+        let mut cfg = tsp_geo::SolverConfig::default();
+        if self.time_limit > 0.0 {
+            cfg.time_limit = Some(std::time::Duration::from_secs_f64(self.time_limit));
+        }
+        cfg.seed = self.seed;
+        cfg.threads = self.threads;
+        cfg.max_neighbors = self.max_neighbors.max(4);
+        cfg.max_candidates = cfg.max_candidates.max(cfg.max_neighbors + 6);
+        Ok(cfg)
+    }
+
     pub fn log_output_path(&self) -> Option<PathBuf> {
         check_path(&self.log_output)
     }
@@ -306,6 +333,37 @@ mod tests {
         assert_eq!(options.log_output, "run.log");
         assert_eq!(options.input, "points.txt");
         assert_eq!(options.output, "route.txt");
+    }
+
+    #[test]
+    fn to_config_maps_options_and_scales_candidate_cap() {
+        let options = SolverOptions {
+            time_limit: 30.0,
+            seed: 7,
+            threads: 4,
+            max_neighbors: 24,
+            ..SolverOptions::default()
+        };
+        let cfg = options.to_config().expect("valid config");
+        assert_eq!(cfg.time_limit, Some(std::time::Duration::from_secs(30)));
+        assert_eq!(cfg.seed, 7);
+        assert_eq!(cfg.threads, 4);
+        assert_eq!(cfg.max_neighbors, 24);
+        assert!(cfg.max_candidates >= 30, "cap must scale with neighbors");
+    }
+
+    #[test]
+    fn to_config_rejects_non_finite_or_absurd_time_limits() {
+        for bad in [f64::INFINITY, f64::NAN, -1.0, 1e300] {
+            let options = SolverOptions {
+                time_limit: bad,
+                ..SolverOptions::default()
+            };
+            let err = options
+                .to_config()
+                .expect_err("bad time limit should be rejected");
+            assert!(err.to_string().contains("--time-limit"), "{err}");
+        }
     }
 
     #[test]

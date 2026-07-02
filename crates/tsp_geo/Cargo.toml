@@ -1,17 +1,27 @@
 [package]
-name        = "tsp-geo"
-version     = "0.2.0"
-edition     = "2024"
-description = "Core solver library for tsp-mt"
-license     = "Apache-2.0"
-readme      = "../../README.md"
-keywords    = ["tsp", "routing", "geo"]
-categories  = ["algorithms"]
+name         = "tsp-geo"
+version      = "0.2.0"
+edition      = "2024"
+rust-version = "1.85"
+description  = "TSP route ordering for geographic lat/lng coordinates, built on the tsp-ils heuristic (spherical embedding, no projection distortion)"
+license      = "Apache-2.0"
+readme       = "README.md"
+repository   = "https://github.com/TurtIeSocks/tsp-mt"
+keywords     = ["tsp", "routing", "geo", "latitude", "longitude"]
+categories   = ["algorithms", "science::geo"]
+
+[features]
+default = ["std", "parallel"]
+std      = ["tsp-ils/std", "thiserror/std"]
+parallel = ["std", "tsp-ils/parallel"]
+libm     = ["dep:libm", "tsp-ils/libm"]
 
 [dependencies]
-ryu           = "1.0.23"
-log           = "0.4.29"
-env_logger    = "0.11.9"
-thiserror     = "2.0.18"
-tsp_mt_derive = { path = "../tsp_mt_derive", version = "0.1.0" }
-tsp-ils       = { path = "../tsp_ils", version = "0.1.0" }
+ryu       = "1.0.23"
+log       = "0.4.29"
+thiserror = { version = "2.0.18", default-features = false }
+libm      = { version = "0.2.11", optional = true }
+tsp-ils   = { path = "../tsp_ils", version = "0.1.0", default-features = false }
+
+[dev-dependencies]
+tsp-ils = { path = "../tsp_ils", version = "0.1.0" }

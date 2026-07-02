@@ -1,18 +1,38 @@
-//! Multi-threaded TSP solving on geographic coordinates using a built-in
-//! clean-room solver (candidate-list 2-opt/Or-opt local search with
-//! parallel segment-based iterated local search).
+//! # tsp-geo
+//!
+//! TSP route ordering for geographic coordinates (`lat,lng`), built on the
+//! [`tsp_ils`] solver.
+//!
+//! Points are embedded on an Earth-radius sphere in 3D, so the solver
+//! optimizes chord distance — indistinguishable from great-circle distance
+//! at routing scales, with no tangent-plane distortion at poles, the date
+//! line, or continental extents.
+//!
+//! ```no_run
+//! use tsp_geo::{GeoPoint, SolverConfig, solve};
+//!
+//! let points = vec![
+//!     GeoPoint::from_lat_lng(52.5200, 13.4050),
+//!     GeoPoint::from_lat_lng(48.8566, 2.3522),
+//!     GeoPoint::from_lat_lng(51.5074, -0.1278),
+//! ];
+//! let route = solve(&points, &SolverConfig::default()).unwrap();
+//! ```
+
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
 
 mod error;
-mod io;
-pub mod logging;
+mod fmath;
 mod node;
-pub mod solver;
+mod solve;
 mod tour;
 
-pub(crate) use io::options;
-
 pub use error::{Error, Result};
-pub use io::input::SolverInput;
-pub use io::options::SolverOptions;
 pub use node::GeoPoint;
-pub use tour::Tour;
+pub use solve::{SolverConfig, solve, solve_order};
+pub use tour::{Tour, TourMetrics};
+
+/// Re-export of the underlying solver crate for advanced configuration.
+pub use tsp_ils;

@@ -1,4 +1,6 @@
-use std::fmt;
+use core::fmt;
+
+use crate::fmath;
 
 const R: f64 = 6_371_000.0;
 const NINETY: f64 = 90.0;
@@ -23,10 +25,10 @@ impl GeoPoint {
         let (lat1, lat2) = (self.y.to_radians(), rhs.y.to_radians());
         let dlat = (rhs.y - self.y).to_radians();
         let dlng = (rhs.x - self.x).to_radians();
-        let s1 = (dlat / 2.0).sin();
-        let s2 = (dlng / 2.0).sin();
-        let h = s1 * s1 + lat1.cos() * lat2.cos() * s2 * s2;
-        2.0 * R * h.sqrt().asin()
+        let s1 = fmath::sin(dlat / 2.0);
+        let s2 = fmath::sin(dlng / 2.0);
+        let h = s1 * s1 + fmath::cos(lat1) * fmath::cos(lat2) * s2 * s2;
+        2.0 * R * fmath::asin(fmath::sqrt(h))
     }
 
     /// Embed on a sphere of Earth radius, in meters. The 3D Euclidean
@@ -37,12 +39,13 @@ impl GeoPoint {
     pub fn unit_sphere_meters(&self) -> [f64; 3] {
         let lat = self.y.to_radians();
         let lng = self.x.to_radians();
-        let (sin_lat, cos_lat) = lat.sin_cos();
-        let (sin_lng, cos_lng) = lng.sin_cos();
+        let (sin_lat, cos_lat) = fmath::sin_cos(lat);
+        let (sin_lng, cos_lng) = fmath::sin_cos(lng);
         [R * cos_lat * cos_lng, R * cos_lat * sin_lng, R * sin_lat]
     }
 
-    pub(crate) fn is_valid(self) -> bool {
+    /// Coordinates are finite and within lat/lng bounds.
+    pub fn is_valid(self) -> bool {
         self.y.is_finite()
             && self.x.is_finite()
             && (-NINETY..=NINETY).contains(&self.y)

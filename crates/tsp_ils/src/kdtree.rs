@@ -6,10 +6,28 @@
 //! holds the splitting point; everything left of it is <= the split value on
 //! the split dimension, everything right is >=.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
+#[cfg(feature = "parallel")]
 use rayon::join;
 
 pub const LEAF_SIZE: usize = 8;
+#[cfg(feature = "parallel")]
 const PARALLEL_BUILD_MIN: usize = 4096;
+
+/// `f64::sqrt` is a std intrinsic; route through libm without std.
+#[inline(always)]
+pub(crate) fn sqrt(x: f64) -> f64 {
+    #[cfg(feature = "std")]
+    {
+        x.sqrt()
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        libm::sqrt(x)
+    }
+}
 
 pub struct KdTree<'a, const D: usize> {
     pts: &'a [[f64; D]],
@@ -29,7 +47,7 @@ pub fn dist_sq<const D: usize>(a: &[f64; D], b: &[f64; D]) -> f64 {
 
 #[inline(always)]
 pub fn dist<const D: usize>(a: &[f64; D], b: &[f64; D]) -> f64 {
-    dist_sq(a, b).sqrt()
+    sqrt(dist_sq(a, b))
 }
 
 impl<'a, const D: usize> KdTree<'a, D> {
@@ -54,7 +72,7 @@ impl<'a, const D: usize> KdTree<'a, D> {
         }
         self.knn_range(0, self.idx.len(), query, k, skip, out);
         for entry in out.iter_mut() {
-            entry.0 = entry.0.sqrt();
+            entry.0 = sqrt(entry.0);
         }
     }
 
@@ -101,7 +119,7 @@ impl<'a, const D: usize> KdTree<'a, D> {
     ) -> Option<(f64, u32)> {
         let mut best: Option<(f64, u32)> = None;
         self.nearest_filtered_range(0, self.idx.len(), query, &accept, &mut best);
-        best.map(|(d2, i)| (d2.sqrt(), i))
+        best.map(|(d2, i)| (sqrt(d2), i))
     }
 
     fn nearest_filtered_range<F: Fn(u32) -> bool>(
@@ -192,15 +210,16 @@ fn build_range<const D: usize>(pts: &[[f64; D]], idx: &mut [u32], split_dim: &mu
     let (_, idx_right) = idx_rest.split_at_mut(1);
     let (dim_left, dim_rest) = split_dim.split_at_mut(mid);
     let (_, dim_right) = dim_rest.split_at_mut(1);
+    #[cfg(feature = "parallel")]
     if len >= PARALLEL_BUILD_MIN {
         join(
             || build_range(pts, idx_left, dim_left),
             || build_range(pts, idx_right, dim_right),
         );
-    } else {
-        build_range(pts, idx_left, dim_left);
-        build_range(pts, idx_right, dim_right);
+        return;
     }
+    build_range(pts, idx_left, dim_left);
+    build_range(pts, idx_right, dim_right);
 }
 
 #[cfg(test)]

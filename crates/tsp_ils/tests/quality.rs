@@ -7,11 +7,10 @@ use std::time::Duration;
 use tsp_ils::{SolverConfig, cycle_length, solve};
 
 fn cfg(seconds: f64) -> SolverConfig {
-    SolverConfig {
-        time_limit: Some(Duration::from_secs_f64(seconds)),
-        threads: 4,
-        ..SolverConfig::default()
-    }
+    let mut cfg = SolverConfig::default();
+    cfg.time_limit = Some(Duration::from_secs_f64(seconds));
+    cfg.threads = 4;
+    cfg
 }
 
 /// Exact optimal cycle length via Held-Karp dynamic programming (n <= ~15).
@@ -145,16 +144,12 @@ fn segment_rounds_path_solves_grid_near_optimally() {
     let k = 40usize;
     let n = k * k;
     let pts: Vec<[f64; 2]> = (0..n).map(|i| [(i % k) as f64, (i / k) as f64]).collect();
-    let sol = solve(
-        &pts,
-        &SolverConfig {
-            time_limit: Some(Duration::from_secs(10)),
-            threads: 4,
-            multi_start_max: 0,
-            min_segment_len: 200,
-            ..SolverConfig::default()
-        },
-    );
+    let mut seg_cfg = SolverConfig::default();
+    seg_cfg.time_limit = Some(Duration::from_secs(10));
+    seg_cfg.threads = 4;
+    seg_cfg.multi_start_max = 0;
+    seg_cfg.min_segment_len = 200;
+    let sol = solve(&pts, &seg_cfg);
     let mut seen = vec![false; n];
     for &v in &sol.tour {
         assert!(!seen[v as usize]);
@@ -172,14 +167,10 @@ fn segment_rounds_path_solves_grid_near_optimally() {
 fn respects_thread_count_and_stays_consistent() {
     let pts = random_points(4000, 33, 100_000.0);
     for threads in [1, 8] {
-        let sol = solve(
-            &pts,
-            &SolverConfig {
-                time_limit: Some(Duration::from_secs(3)),
-                threads,
-                ..SolverConfig::default()
-            },
-        );
+        let mut cfg = SolverConfig::default();
+        cfg.time_limit = Some(Duration::from_secs(3));
+        cfg.threads = threads;
+        let sol = solve(&pts, &cfg);
         assert_eq!(sol.tour.len(), pts.len());
         let recomputed = cycle_length(&pts, &sol.tour);
         assert!((recomputed - sol.length).abs() < 1e-6 * recomputed);

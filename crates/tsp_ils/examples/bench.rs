@@ -46,16 +46,15 @@ fn main() {
         .get(6)
         .and_then(|s| s.parse().ok())
         .unwrap_or(defaults.multi_start_max);
-    let cfg = SolverConfig {
-        time_limit: Some(Duration::from_secs_f64(seconds)),
-        threads,
-        max_neighbors,
-        max_candidates: max_neighbors + 6,
-        or_opt_max_len,
-        min_segment_len,
-        multi_start_max,
-        ..defaults
-    };
+    let mut cfg = defaults;
+    cfg.time_limit = Some(Duration::from_secs_f64(seconds));
+    cfg.threads = threads;
+    cfg.max_neighbors = max_neighbors;
+    cfg.max_candidates = max_neighbors + 6;
+    cfg.or_opt_max_len = or_opt_max_len;
+    cfg.min_segment_len = min_segment_len;
+    cfg.multi_start_max = multi_start_max;
+    let cfg = cfg;
 
     let start = Instant::now();
     let sol = solve(&pts, &cfg);

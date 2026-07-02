@@ -7,6 +7,10 @@
 //! (if j is a candidate of i, i becomes a candidate of j), which improves
 //! move coverage for points on cluster boundaries.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
 use crate::kdtree::KdTree;
@@ -56,7 +60,8 @@ impl Candidates {
         let n = pts.len();
         let k = k.min(n.saturating_sub(1));
 
-        // Parallel kNN queries: raw (asymmetric) neighbor lists.
+        // kNN queries (parallel when available): raw asymmetric lists.
+        #[cfg(feature = "parallel")]
         let raw: Vec<Vec<(f64, u32)>> = pts
             .par_iter()
             .enumerate()
@@ -65,6 +70,17 @@ impl Candidates {
                 scratch.clone()
             })
             .collect();
+        #[cfg(not(feature = "parallel"))]
+        let raw: Vec<Vec<(f64, u32)>> = {
+            let mut scratch = Vec::new();
+            pts.iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    tree.knn(p, k, i as u32, &mut scratch);
+                    scratch.clone()
+                })
+                .collect()
+        };
 
         // Symmetrize into a CSR structure: each undirected edge contributes
         // to both endpoints, duplicates removed per node. The intermediate
@@ -104,24 +120,29 @@ impl Candidates {
             drop(raw);
 
             // Per node: sort by distance, drop duplicate targets, cap the list.
-            (0..n)
-                .into_par_iter()
-                .map(|i| {
-                    let lo = offsets[i] as usize;
-                    let hi = offsets[i + 1] as usize;
-                    let mut list: Vec<(f64, u32)> = targets[lo..hi]
-                        .iter()
-                        .copied()
-                        .zip(dists[lo..hi].iter().copied())
-                        .map(|(t, d)| (d, t))
-                        .collect();
-                    list.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-                    list.dedup_by_key(|e| e.1);
-                    list.truncate(max_per_node);
-                    list.shrink_to_fit();
-                    list
-                })
-                .collect()
+            let build_list = |i: usize| {
+                let lo = offsets[i] as usize;
+                let hi = offsets[i + 1] as usize;
+                let mut list: Vec<(f64, u32)> = targets[lo..hi]
+                    .iter()
+                    .copied()
+                    .zip(dists[lo..hi].iter().copied())
+                    .map(|(t, d)| (d, t))
+                    .collect();
+                list.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                list.dedup_by_key(|e| e.1);
+                list.truncate(max_per_node);
+                list.shrink_to_fit();
+                list
+            };
+            #[cfg(feature = "parallel")]
+            {
+                (0..n).into_par_iter().map(build_list).collect()
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                (0..n).map(build_list).collect()
+            }
         };
 
         let mut offsets = vec![0u32; n + 1];

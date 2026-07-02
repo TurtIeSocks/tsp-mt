@@ -6,6 +6,10 @@
 //! substantially better than nearest-neighbor, and gives local search a
 //! spatially coherent tour to refine.
 
+use alloc::vec;
+use alloc::vec::Vec;
+
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
 use crate::candidates::Candidates;
@@ -22,7 +26,13 @@ pub fn greedy_tour<const D: usize>(
     }
 
     let mut edges = cand.undirected_edges();
-    edges.par_sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then((a.1, a.2).cmp(&(b.1, b.2))));
+    let by_len = |a: &(f64, u32, u32), b: &(f64, u32, u32)| {
+        a.0.total_cmp(&b.0).then((a.1, a.2).cmp(&(b.1, b.2)))
+    };
+    #[cfg(feature = "parallel")]
+    edges.par_sort_unstable_by(by_len);
+    #[cfg(not(feature = "parallel"))]
+    edges.sort_unstable_by(by_len);
 
     let mut uf = UnionFind::new(n);
     let mut degree = vec![0u8; n];

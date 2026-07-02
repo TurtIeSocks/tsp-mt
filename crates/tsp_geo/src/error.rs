@@ -1,7 +1,10 @@
+use alloc::string::String;
+
 use thiserror::Error as ThisError;
 
 #[derive(Debug, ThisError)]
 pub enum Error {
+    #[cfg(feature = "std")]
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("invalid input: {0}")]
@@ -12,7 +15,7 @@ pub enum Error {
     Other(String),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, Error>;
 
 impl Error {
     pub fn invalid_input(message: impl Into<String>) -> Self {

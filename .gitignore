@@ -20,3 +20,4 @@ target/
 /benchmark/**/*.tsv
 /benchmark/**/*.log
 !/benchmark/README.md
+*.log

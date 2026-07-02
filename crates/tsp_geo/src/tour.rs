@@ -1,13 +1,17 @@
-use tsp_mt_derive::New;
+use alloc::vec::Vec;
 
 use crate::GeoPoint;
 
-#[derive(Debug, Default, New)]
+#[derive(Debug, Default)]
 pub struct Tour {
     pub nodes: Vec<GeoPoint>,
 }
 
 impl Tour {
+    pub fn new(nodes: Vec<GeoPoint>) -> Self {
+        Self { nodes }
+    }
+
     pub fn tour_metrics(&self, threshold_factor: f64) -> TourMetrics {
         let n = self.n();
 
@@ -43,7 +47,7 @@ impl Tour {
     }
 }
 
-#[derive(Debug, Default, New)]
+#[derive(Debug, Default)]
 pub struct TourMetrics {
     pub longest: f64,
     pub outliers: usize,

@@ -1,3 +1,7 @@
+mod input;
+mod logging;
+mod options;
+
 use std::{
     fs::{self, File},
     io::{Write, stdout},
@@ -5,7 +9,11 @@ use std::{
 
 use log::info;
 
-use tsp_geo::{GeoPoint, Result, SolverInput, SolverOptions, Tour, logging, solver};
+pub(crate) use tsp_geo::{Error, Result};
+use tsp_geo::{GeoPoint, Tour};
+
+use input::SolverInput;
+use options::SolverOptions;
 
 fn main() -> Result<()> {
     if std::env::args()
@@ -25,12 +33,13 @@ fn main() -> Result<()> {
 #[tsp_mt_derive::timer("main")]
 fn main_inner(options: SolverOptions) -> Result<()> {
     let input = SolverInput::from_args(&options)?;
+    let config = options.to_config()?;
     let output_path = options.output_path();
     let outlier_threshold = options.outlier_threshold;
 
     info!("input: {input}");
     info!("options: {options}");
-    let tour = Tour::new(solver::solve(input, &options)?);
+    let tour = Tour::new(tsp_geo::solve(&input.nodes, &config)?);
     tour.tour_metrics(outlier_threshold);
     write_route_output(&tour.nodes, output_path.as_deref())?;
 

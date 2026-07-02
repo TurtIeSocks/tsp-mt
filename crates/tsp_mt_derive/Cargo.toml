@@ -2,9 +2,10 @@
 name = "tsp_mt_derive"
 version = "0.1.0"
 edition = "2024"
-description = "Proc-macros for tsp-mt CLI parsing and structured logging/timing helpers"
+rust-version = "1.85"
+description = "Internal proc-macros for the tsp-mt CLI (option parsing, display, timing); not a general-purpose API"
 license = "Apache-2.0"
-readme = "../../README.md"
+repository = "https://github.com/TurtIeSocks/tsp-mt"
 keywords = ["proc-macro", "cli", "derive", "tsp-mt"]
 categories = ["development-tools::procedural-macro-helpers"]
 

@@ -19,8 +19,11 @@
 //! would remove the frozen edge is rejected, which is exactly equivalent to
 //! optimizing an open path with fixed endpoints.
 
-use std::collections::VecDeque;
-use std::time::Instant;
+use alloc::collections::VecDeque;
+use alloc::vec;
+use alloc::vec::Vec;
+
+use crate::platform::{self, Instant};
 
 use crate::candidates::Candidates;
 use crate::kdtree::dist;
@@ -522,7 +525,7 @@ impl<'a, const D: usize> TourState<'a, D> {
             }
             self.dont_look[v as usize] = true;
             steps += 1;
-            if steps & 0x3FF == 0 && Instant::now() > deadline {
+            if steps & 0x3FF == 0 && platform::expired(deadline) {
                 return false;
             }
         }
@@ -540,7 +543,7 @@ impl<'a, const D: usize> TourState<'a, D> {
         let mut best = self.order.clone();
         let mut best_len = self.cur_len;
         let mut kicks = 0;
-        while kicks < max_kicks && Instant::now() < deadline {
+        while kicks < max_kicks && !platform::expired(deadline) {
             if !self.double_bridge() {
                 break;
             }

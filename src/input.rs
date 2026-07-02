@@ -5,7 +5,10 @@ use std::{
 };
 use tsp_mt_derive::KvDisplay;
 
-use crate::{Error, GeoPoint, Result, SolverOptions};
+use tsp_geo::GeoPoint;
+
+use crate::options::SolverOptions;
+use crate::{Error, Result};
 
 /// Runtime input for the solver.
 #[derive(Clone, Debug, KvDisplay)]
@@ -15,22 +18,12 @@ pub struct SolverInput {
 }
 
 impl SolverInput {
-    pub fn new(points: &[GeoPoint]) -> Self {
-        Self {
-            nodes: points.to_vec(),
-        }
-    }
-
     pub fn from_args(options: &SolverOptions) -> Result<Self> {
         let nodes = match options.input_path() {
             Some(path) => from_file(&path)?,
             None => from_stdin()?,
         };
         Ok(Self { nodes })
-    }
-
-    pub fn points_len(&self) -> usize {
-        self.nodes.len()
     }
 }
 

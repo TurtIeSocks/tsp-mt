@@ -10,9 +10,24 @@ fully self-contained in Rust — no external solver binary required.
 - Writes ordered points to `stdout` (one `lat,lng` per line) or `--output <path>`
 - Writes logs/metrics to `stderr` (default) or `--log-output <path>`
 
+## Workspace Layout
+
+| Crate | What it is |
+| --- | --- |
+| [`tsp-ils`](crates/tsp_ils) | The solver engine: candidate-list 2-opt/Or-opt iterated local search, optionally multi-core. `no_std`- and wasm-capable. |
+| [`tsp-geo`](crates/tsp_geo) | Geographic layer: `lat,lng` points in, route order out (spherical embedding, haversine metrics). |
+| `tsp-mt` | This CLI binary: argument parsing, stdin/file I/O, logging. |
+| `tsp_mt_derive` | Internal proc-macros for the CLI. |
+
+Both libraries build for WebAssembly: sequentially with
+`--no-default-features --features std` (runs in any browser), or
+multi-threaded with the default features plus
+[wasm-bindgen-rayon](https://github.com/RReverser/wasm-bindgen-rayon).
+`no_std` (with `alloc`) is supported via `--no-default-features --features libm`.
+
 ## How It Works
 
-The solver (crate `tsp_ils`) is an original implementation of well-published
+The solver (crate `tsp-ils`) is an original implementation of well-published
 techniques from the Lin–Kernighan family of TSP heuristics. It contains no code
 from LKH or any other solver — only the ideas, implemented from the literature
 (Lin & Kernighan 1973; Or 1976; Bentley 1992; Helsgaun 2000):

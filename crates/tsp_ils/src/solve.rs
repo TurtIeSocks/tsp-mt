@@ -8,17 +8,22 @@
 //! and get optimized too. Small instances instead run one independent
 //! iterated-local-search walker per core and keep the best result.
 
-use std::time::{Duration, Instant};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::time::Duration;
 
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
 use crate::candidates::Candidates;
 use crate::construct::greedy_tour;
 use crate::kdtree::{KdTree, dist};
+use crate::platform::{self, Instant};
 use crate::rng::SplitMix64;
 use crate::state::TourState;
 
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct SolverConfig {
     /// Wall-clock budget. `None` derives one from the instance size.
     /// Construction (candidate lists + greedy tour) always runs to
@@ -97,6 +102,7 @@ impl SolverConfig {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct Solution {
     /// Visiting order as indices into the input point slice.
     pub tour: Vec<u32>,
@@ -111,11 +117,31 @@ pub fn solve<const D: usize>(pts: &[[f64; D]], cfg: &SolverConfig) -> Solution {
         let length = cycle_length(pts, &tour);
         return Solution { tour, length };
     }
-    let pool = rayon::ThreadPoolBuilder::new()
+    // Custom pools are unsupported on wasm (wasm-bindgen-rayon initializes
+    // the global pool instead), and pool creation can fail under OS resource
+    // pressure; in both cases fall back to the current/global pool rather
+    // than panicking.
+    #[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
+    match rayon::ThreadPoolBuilder::new()
         .num_threads(cfg.threads)
         .build()
-        .expect("failed to build thread pool");
-    pool.install(|| solve_inner(pts, cfg))
+    {
+        Ok(pool) => return pool.install(|| solve_inner(pts, cfg)),
+        Err(err) => log::warn!("solver: thread pool build failed ({err}); using global pool"),
+    }
+    solve_inner(pts, cfg)
+}
+
+/// Worker count visible to the orchestration heuristics.
+fn worker_count() -> usize {
+    #[cfg(feature = "parallel")]
+    {
+        rayon::current_num_threads().max(1)
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        1
+    }
 }
 
 fn solve_inner<const D: usize>(pts: &[[f64; D]], cfg: &SolverConfig) -> Solution {
@@ -151,7 +177,7 @@ fn solve_inner<const D: usize>(pts: &[[f64; D]], cfg: &SolverConfig) -> Solution
     let mut st = TourState::new(
         pts,
         &cand,
-        std::mem::take(&mut order),
+        core::mem::take(&mut order),
         None,
         cfg.or_opt_max_len,
         cfg.kick_window_for(n),
@@ -182,24 +208,32 @@ fn multi_start<const D: usize>(
     deadline: Instant,
 ) -> Vec<u32> {
     let n = pts.len();
-    let runs = rayon::current_num_threads().max(1);
-    let results: Vec<(f64, Vec<u32>)> = (0..runs)
-        .into_par_iter()
-        .map(|run| {
-            let rng = SplitMix64::derive(cfg.seed, 0x5EED, run as u64);
-            let mut st = TourState::new(
-                pts,
-                cand,
-                initial.clone(),
-                None,
-                cfg.or_opt_max_len,
-                cfg.kick_window_for(n),
-                rng,
-            );
-            st.optimize(deadline, usize::MAX);
-            (st.cur_len, st.order)
-        })
-        .collect();
+    let runs = worker_count();
+    // Without a clock the kick loop needs a finite budget; with one, the
+    // deadline is the budget.
+    let kicks = if cfg!(feature = "std") {
+        usize::MAX
+    } else {
+        (n * 8).max(1024)
+    };
+    let walker = |run: usize| {
+        let rng = SplitMix64::derive(cfg.seed, 0x5EED, run as u64);
+        let mut st = TourState::new(
+            pts,
+            cand,
+            initial.clone(),
+            None,
+            cfg.or_opt_max_len,
+            cfg.kick_window_for(n),
+            rng,
+        );
+        st.optimize(deadline, kicks);
+        (st.cur_len, st.order)
+    };
+    #[cfg(feature = "parallel")]
+    let results: Vec<(f64, Vec<u32>)> = (0..runs).into_par_iter().map(walker).collect();
+    #[cfg(not(feature = "parallel"))]
+    let results: Vec<(f64, Vec<u32>)> = (0..runs).map(walker).collect();
     let best = results
         .into_iter()
         .min_by(|a, b| a.0.total_cmp(&b.0))
@@ -220,7 +254,7 @@ fn segment_rounds<const D: usize>(
     deadline: Instant,
 ) -> Vec<u32> {
     let n = pts.len();
-    let threads = rayon::current_num_threads();
+    let threads = worker_count();
     // Coarse-to-fine schedule: start with enough segments to keep every core
     // busy for the initial descent, then grow segments (halve their count)
     // as rounds stop improving — benchmarks show segment boundaries are the
@@ -257,27 +291,27 @@ fn segment_rounds<const D: usize>(
 
         let order_ref = &order;
         let pos_ref = &pos;
-        let paths: Vec<(usize, Vec<u32>)> = bounds
-            .par_iter()
-            .enumerate()
-            .map(|(seg_idx, &(lo, seg_len))| {
-                let path = solve_segment(
-                    pts,
-                    cand,
-                    order_ref,
-                    pos_ref,
-                    lo,
-                    seg_len,
-                    cfg,
-                    round,
-                    seg_idx as u64,
-                    kick_scale,
-                    replicas,
-                    rounds_deadline.min(deadline),
-                );
-                (lo, path)
-            })
-            .collect();
+        let solve_one = |(seg_idx, &(lo, seg_len)): (usize, &(usize, usize))| {
+            let path = solve_segment(
+                pts,
+                cand,
+                order_ref,
+                pos_ref,
+                lo,
+                seg_len,
+                cfg,
+                round,
+                seg_idx as u64,
+                kick_scale,
+                replicas,
+                platform::earlier(rounds_deadline, deadline),
+            );
+            (lo, path)
+        };
+        #[cfg(feature = "parallel")]
+        let paths: Vec<(usize, Vec<u32>)> = bounds.par_iter().enumerate().map(solve_one).collect();
+        #[cfg(not(feature = "parallel"))]
+        let paths: Vec<(usize, Vec<u32>)> = bounds.iter().enumerate().map(solve_one).collect();
 
         let mut new_order = vec![0u32; n];
         for (lo, path) in paths {
@@ -305,7 +339,7 @@ fn segment_rounds<const D: usize>(
         }
         len = new_len;
         round += 1;
-        if Instant::now() >= rounds_deadline || (stall >= 6 && kick_scale >= MAX_KICK_SCALE) {
+        if platform::expired(rounds_deadline) || (stall >= 6 && kick_scale >= MAX_KICK_SCALE) {
             break;
         }
     }
@@ -355,28 +389,35 @@ fn solve_segment<const D: usize>(
 
     // Replica 0 uses the same RNG stream as a replica-free run, so best-of-k
     // is never worse than solving the segment once.
-    let (_, _, path) = (0..replicas.max(1) as u64)
+    let attempt = |rep: u64| {
+        let rng = SplitMix64::derive(
+            cfg.seed,
+            round.wrapping_mul(0x9E37) ^ 0xA11CE,
+            seg_idx | (rep << 32),
+        );
+        let mut st = TourState::new(
+            &local_pts,
+            &local_cand,
+            (0..seg_len as u32).collect(),
+            frozen,
+            cfg.or_opt_max_len,
+            cfg.kick_window_for(seg_len),
+            rng,
+        );
+        st.optimize(deadline, kicks);
+        (st.cur_len, rep, st.path_from(0, seg_len as u32 - 1))
+    };
+    let range = 0..replicas.max(1) as u64;
+    #[cfg(feature = "parallel")]
+    let best = range
         .into_par_iter()
-        .map(|rep| {
-            let rng = SplitMix64::derive(
-                cfg.seed,
-                round.wrapping_mul(0x9E37) ^ 0xA11CE,
-                seg_idx | (rep << 32),
-            );
-            let mut st = TourState::new(
-                &local_pts,
-                &local_cand,
-                (0..seg_len as u32).collect(),
-                frozen,
-                cfg.or_opt_max_len,
-                cfg.kick_window_for(seg_len),
-                rng,
-            );
-            st.optimize(deadline, kicks);
-            (st.cur_len, rep, st.path_from(0, seg_len as u32 - 1))
-        })
-        .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
-        .expect("at least one replica");
+        .map(attempt)
+        .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    #[cfg(not(feature = "parallel"))]
+    let best = range
+        .map(attempt)
+        .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    let (_, _, path) = best.expect("at least one replica");
 
     path.into_iter()
         .map(|local| globals[local as usize])

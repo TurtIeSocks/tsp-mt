@@ -7,16 +7,19 @@ members = [
 ]
 
 [package]
-name        = "tsp-mt"
-version     = "0.2.0"
-edition     = "2024"
-description = "Multi-threaded TSP solver for lat/lng coordinates with a built-in clean-room Lin-Kernighan-style heuristic"
-license     = "Apache-2.0"
-readme      = "README.md"
-keywords    = ["tsp", "routing", "geo", "heuristics"]
-categories  = ["algorithms", "command-line-utilities"]
+name         = "tsp-mt"
+version      = "0.2.0"
+edition      = "2024"
+rust-version = "1.85"
+description  = "Multi-threaded TSP solver CLI for lat/lng coordinates with a built-in clean-room Lin-Kernighan-style heuristic"
+license      = "Apache-2.0"
+readme       = "README.md"
+repository   = "https://github.com/TurtIeSocks/tsp-mt"
+keywords     = ["tsp", "routing", "geo", "heuristics"]
+categories   = ["algorithms", "command-line-utilities"]
 
 [dependencies]
+env_logger    = "0.11.9"
 log           = "0.4.29"
 tsp-geo       = { path = "crates/tsp_geo", version = "0.2.0" }
 tsp_mt_derive = { path = "crates/tsp_mt_derive", version = "0.1.0" }
