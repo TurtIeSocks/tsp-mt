@@ -142,12 +142,17 @@ mod tests {
         let before = cycle_length(&pts, &initial);
         let sol = refine(&pts, &initial, &fast_cfg());
         assert_permutation(&sol.tour, 64);
-        assert!(sol.length <= before + 1e-9, "refine must not worsen the tour");
+        assert!(
+            sol.length <= before + 1e-9,
+            "refine must not worsen the tour"
+        );
         // Circle optimum is the perimeter; ILS should recover it from a scramble.
-        let perimeter: f64 = (0..64)
-            .map(|i| dist(&pts[i], &pts[(i + 1) % 64]))
-            .sum();
-        assert!(sol.length <= perimeter * 1.001, "got {} want ~{perimeter}", sol.length);
+        let perimeter: f64 = (0..64).map(|i| dist(&pts[i], &pts[(i + 1) % 64])).sum();
+        assert!(
+            sol.length <= perimeter * 1.001,
+            "got {} want ~{perimeter}",
+            sol.length
+        );
     }
 
     #[test]

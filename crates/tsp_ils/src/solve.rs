@@ -275,7 +275,11 @@ fn multi_start<const D: usize>(
     };
     let walker = |run: usize| {
         let rng = SplitMix64::derive(cfg.seed, 0x5EED, run as u64);
-        let start_tour = if run == 0 { primary.clone() } else { alt.clone() };
+        let start_tour = if run == 0 {
+            primary.clone()
+        } else {
+            alt.clone()
+        };
         let mut st = TourState::new(
             pts,
             cand,
