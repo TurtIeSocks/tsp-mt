@@ -184,6 +184,21 @@ See [benchmark/README.md](benchmark/README.md).
   At least one point is out of bounds or non-finite; the message names the
   offending token or file line.
 
+## Releasing
+
+Publishing to crates.io is automated: bump the crate versions you intend to
+release, commit, then tag and push:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+The [publish workflow](.github/workflows/publish.yml) checks that the tag
+matches the `tsp-mt` version, runs the test suite, and publishes the crates
+in dependency order (`tsp_mt_derive` → `tsp-ils` → `tsp-geo` → `tsp-mt`),
+skipping any version that is already on crates.io. It requires a crates.io
+API token stored as the `CARGO_REGISTRY_TOKEN` repository secret.
+
 ## License & Attribution
 
 Apache-2.0 for the entire workspace. The solver implements algorithms
