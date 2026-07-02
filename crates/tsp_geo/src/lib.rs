@@ -22,6 +22,8 @@
 //! With the `geo-types` feature, georust [`geo-types`](https://docs.rs/geo-types)
 //! values (`Coord`, `Point`) convert to and from [`GeoPoint`], and
 //! [`solve_order_of`] accepts iterators of them directly.
+//!
+//! Seed-tour refinement — [`refine_order`] improves a caller-supplied order with the same pipeline.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 

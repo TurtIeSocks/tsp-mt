@@ -1,6 +1,6 @@
 [package]
 name         = "tsp-geo"
-version      = "0.2.0"
+version      = "0.3.0"
 edition      = "2024"
 rust-version = "1.85"
 description  = "TSP route ordering for geographic lat/lng coordinates, built on the tsp-ils heuristic (spherical embedding, no projection distortion)"
@@ -24,7 +24,7 @@ log       = "0.4.29"
 thiserror = { version = "2.0.18", default-features = false }
 libm      = { version = "0.2.11", optional = true }
 geo-types = { version = "0.7.17", optional = true, default-features = false }
-tsp-ils   = { path = "../tsp_ils", version = "0.1.0", default-features = false }
+tsp-ils   = { path = "../tsp_ils", version = "0.2.0", default-features = false }
 
 [dev-dependencies]
-tsp-ils = { path = "../tsp_ils", version = "0.1.0" }
+tsp-ils = { path = "../tsp_ils", version = "0.2.0" }

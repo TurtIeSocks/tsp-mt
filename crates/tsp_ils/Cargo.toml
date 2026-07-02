@@ -1,6 +1,6 @@
 [package]
 name         = "tsp-ils"
-version      = "0.1.0"
+version      = "0.2.0"
 edition      = "2024"
 rust-version = "1.85"
 description  = "Clean-room TSP heuristic: candidate-list 2-opt/Or-opt local search with greedy construction, don't-look bits, and (optionally multi-core) segment-based iterated local search"

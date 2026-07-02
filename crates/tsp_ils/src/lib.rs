@@ -42,6 +42,8 @@
 //!   (`--no-default-features --features libm`). Without a clock, time limits
 //!   are ignored and the solver stops on convergence and finite kick budgets,
 //!   which also makes results bit-reproducible.
+//!
+//! Seed-tour refinement — [`refine`] improves a caller-supplied order with the same pipeline.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 

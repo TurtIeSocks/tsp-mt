@@ -76,11 +76,7 @@ cargo build --release
 
 ### Use With [Koji](https://github.com/TurtIeSocks/Koji)
 
-Build, then copy the final binary to Koji's routing plugins folder:
-
-```bash
-cp target/release/tsp-mt ~/{your_koji_directory}/server/algorithms/src/routing/plugins/
-```
+Koji ≥ v2 consumes `tsp-ils` and `tsp-geo` as library crates directly (`SortBy::Tsp` standalone, `SortBy::TspHybrid` S2-seeded refine). The CLI binary remains for standalone use.
 
 ## Input Format
 
