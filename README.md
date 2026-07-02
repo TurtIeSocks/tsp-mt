@@ -193,11 +193,14 @@ release, commit, then tag and push:
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-The [publish workflow](.github/workflows/publish.yml) checks that the tag
-matches the `tsp-mt` version, runs the test suite, and publishes the crates
-in dependency order (`tsp_mt_derive` → `tsp-ils` → `tsp-geo` → `tsp-mt`),
-skipping any version that is already on crates.io. It requires a crates.io
-API token stored as the `CARGO_REGISTRY_TOKEN` repository secret.
+Only the two library crates are published — the `tsp-mt` binary and
+`tsp_mt_derive` are repo-only (`publish = false`). The
+[publish workflow](.github/workflows/publish.yml) checks that the tag
+matches the version of `tsp-ils` or `tsp-geo`, runs the test suite, and
+publishes them in dependency order, skipping any version that is already on
+crates.io. It requires a crates.io API token stored as the
+`CARGO_REGISTRY_TOKEN` repository secret. Install the CLI from the repo
+instead: `cargo install --git https://github.com/TurtIeSocks/tsp-mt`.
 
 ## License & Attribution
 

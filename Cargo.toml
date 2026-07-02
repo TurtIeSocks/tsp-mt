@@ -11,6 +11,7 @@ name         = "tsp-mt"
 version      = "0.2.0"
 edition      = "2024"
 rust-version = "1.85"
+publish      = false
 description  = "Multi-threaded TSP solver CLI for lat/lng coordinates with a built-in clean-room Lin-Kernighan-style heuristic"
 license      = "Apache-2.0"
 readme       = "README.md"

@@ -3,6 +3,7 @@ name = "tsp_mt_derive"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
+publish = false
 description = "Internal proc-macros for the tsp-mt CLI (option parsing, display, timing); not a general-purpose API"
 license = "Apache-2.0"
 repository = "https://github.com/TurtIeSocks/tsp-mt"
