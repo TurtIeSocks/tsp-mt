@@ -1,0 +1,12 @@
+[package]
+name        = "tsp_solver"
+version     = "0.1.0"
+edition     = "2024"
+description = "Clean-room multi-core TSP heuristic: candidate-list local search (2-opt + Or-opt) with greedy construction, don't-look bits, and parallel segment-based iterated local search"
+license     = "Apache-2.0"
+keywords    = ["tsp", "routing", "heuristics", "optimization"]
+categories  = ["algorithms"]
+
+[dependencies]
+log   = "0.4.29"
+rayon = "1.11.0"

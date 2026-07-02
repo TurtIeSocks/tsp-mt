@@ -5,17 +5,17 @@ use std::{
 };
 use tsp_mt_derive::KvDisplay;
 
-use crate::{Error, LKHNode, Result, SolverOptions};
+use crate::{Error, GeoPoint, Result, SolverOptions};
 
-/// Runtime input for LKH solver.
+/// Runtime input for the solver.
 #[derive(Clone, Debug, KvDisplay)]
 pub struct SolverInput {
     #[kv(fmt = "len")]
-    pub(crate) nodes: Vec<LKHNode>,
+    pub(crate) nodes: Vec<GeoPoint>,
 }
 
 impl SolverInput {
-    pub fn new(points: &[LKHNode]) -> Self {
+    pub fn new(points: &[GeoPoint]) -> Self {
         Self {
             nodes: points.to_vec(),
         }
@@ -32,23 +32,15 @@ impl SolverInput {
     pub fn points_len(&self) -> usize {
         self.nodes.len()
     }
-
-    pub(crate) fn n(&self) -> usize {
-        self.nodes.len()
-    }
-
-    pub(crate) fn get_point(&self, idx: usize) -> LKHNode {
-        self.nodes[idx]
-    }
 }
 
-fn from_stdin() -> Result<Vec<LKHNode>> {
+fn from_stdin() -> Result<Vec<GeoPoint>> {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input)?;
     parse_points_from_tokens(&input)
 }
 
-fn from_file(path: &PathBuf) -> Result<Vec<LKHNode>> {
+fn from_file(path: &PathBuf) -> Result<Vec<GeoPoint>> {
     let bytes = fs::read(path)?;
     let input = std::str::from_utf8(&bytes).map_err(|_| {
         Error::invalid_input(format!(
@@ -59,7 +51,7 @@ fn from_file(path: &PathBuf) -> Result<Vec<LKHNode>> {
     parse_points_from_rows(input, path)
 }
 
-fn parse_points_from_tokens(input: &str) -> Result<Vec<LKHNode>> {
+fn parse_points_from_tokens(input: &str) -> Result<Vec<GeoPoint>> {
     let mut points = Vec::new();
     for (idx, tok) in input.split_whitespace().enumerate() {
         points.push(parse_lat_lng(tok, &format!("Token {}", idx + 1))?);
@@ -72,7 +64,7 @@ fn parse_points_from_tokens(input: &str) -> Result<Vec<LKHNode>> {
     Ok(points)
 }
 
-fn parse_points_from_rows(input: &str, path: &Path) -> Result<Vec<LKHNode>> {
+fn parse_points_from_rows(input: &str, path: &Path) -> Result<Vec<GeoPoint>> {
     let mut points = Vec::new();
     for (idx, line) in input.lines().enumerate() {
         let line_no = idx + 1;
@@ -108,7 +100,7 @@ fn parse_points_from_rows(input: &str, path: &Path) -> Result<Vec<LKHNode>> {
     Ok(points)
 }
 
-fn parse_lat_lng(raw: &str, ctx: &str) -> Result<LKHNode> {
+fn parse_lat_lng(raw: &str, ctx: &str) -> Result<GeoPoint> {
     let mut it = raw.split(',');
     let lat_s = it
         .next()
@@ -130,7 +122,7 @@ fn parse_lat_lng(raw: &str, ctx: &str) -> Result<LKHNode> {
         .parse()
         .map_err(|_| Error::invalid_input(format!("{ctx}: invalid longitude: {lon_s}")))?;
 
-    let point = LKHNode::from_lat_lng(lat, lon);
+    let point = GeoPoint::from_lat_lng(lat, lon);
     if !point.is_valid() {
         return Err(Error::invalid_input(format!(
             "{ctx}: invalid lat/lng values: {raw}"

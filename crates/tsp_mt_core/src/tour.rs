@@ -1,10 +1,10 @@
 use tsp_mt_derive::New;
 
-use crate::LKHNode;
+use crate::GeoPoint;
 
 #[derive(Debug, Default, New)]
 pub struct Tour {
-    pub nodes: Vec<LKHNode>,
+    pub nodes: Vec<GeoPoint>,
 }
 
 impl Tour {
@@ -55,12 +55,12 @@ pub struct TourMetrics {
 #[cfg(test)]
 mod tests {
     use super::{Tour, TourMetrics};
-    use crate::LKHNode;
+    use crate::GeoPoint;
 
     #[test]
     fn tour_metrics_returns_default_for_short_tours() {
         let empty = Tour::new(Vec::new());
-        let single = Tour::new(vec![LKHNode::from_lat_lng(0.0, 0.0)]);
+        let single = Tour::new(vec![GeoPoint::from_lat_lng(0.0, 0.0)]);
 
         assert_eq!(empty.tour_metrics(2.0).total, TourMetrics::default().total);
         assert_eq!(
@@ -76,9 +76,9 @@ mod tests {
     #[test]
     fn tour_metrics_computes_cycle_lengths_and_outliers() {
         let tour = Tour::new(vec![
-            LKHNode::from_lat_lng(0.0, 0.0),
-            LKHNode::from_lat_lng(0.0, 1.0),
-            LKHNode::from_lat_lng(0.0, 2.0),
+            GeoPoint::from_lat_lng(0.0, 0.0),
+            GeoPoint::from_lat_lng(0.0, 1.0),
+            GeoPoint::from_lat_lng(0.0, 2.0),
         ]);
 
         let metrics = tour.tour_metrics(1.2);

@@ -4,18 +4,10 @@ use thiserror::Error as ThisError;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error(transparent)]
-    Lkh(#[from] lkh::LkhError),
     #[error("invalid input: {0}")]
     InvalidInput(String),
     #[error("invalid data: {0}")]
     InvalidData(String),
-    #[error("{context}.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}")]
-    ProcessFailed {
-        context: String,
-        stdout: String,
-        stderr: String,
-    },
     #[error("{0}")]
     Other(String),
 }

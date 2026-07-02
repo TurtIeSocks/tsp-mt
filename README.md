@@ -1,69 +1,62 @@
 # Multi Threaded Traveling Salesperson
 
-High-performance TSP solver for geographic coordinates (`lat,lng`) utilizing parallel runs, and H3 chunking for large inputs.
+High-performance, multi-core TSP solver for geographic coordinates (`lat,lng`),
+fully self-contained in Rust — no external solver binary required.
 
 ## What It Does
 
-- Reads points from `stdin`
-- Or reads points from `--input <path>`
-- Solves a route order
+- Reads points from `stdin` or `--input <path>`
+- Solves a route order with a built-in clean-room heuristic
 - Writes ordered points to `stdout` (one `lat,lng` per line) or `--output <path>`
 - Writes logs/metrics to `stderr` (default) or `--log-output <path>`
+
+## How It Works
+
+The solver (crate `tsp_solver`) is an original implementation of well-published
+techniques from the Lin–Kernighan family of TSP heuristics. It contains no code
+from LKH or any other solver — only the ideas, implemented from the literature
+(Lin & Kernighan 1973; Or 1976; Bentley 1992; Helsgaun 2000):
+
+1. **Spherical embedding** — points are embedded on an Earth-radius sphere in
+   3D; the solver optimizes Euclidean (chord) distance, which is monotone in
+   great-circle distance. No tangent-plane projection, so there is no
+   distortion for large extents, poles, or the date line.
+2. **Candidate lists** — a k-d tree provides symmetrized k-nearest-neighbor
+   lists; local search only creates geometrically promising edges.
+3. **Greedy construction** — shortest candidate edges first, then nearest-
+   endpoint chaining of leftover path fragments.
+4. **2-opt + Or-opt local search** — with don't-look bits and a work queue;
+   2-opt reverses the shorter arc, Or-opt relocates 1–3 node segments in
+   either orientation.
+5. **Iterated local search** — windowed double-bridge kicks with best-tour
+   restoration, escalating perturbation while budget remains.
+6. **Multi-core split/join** — the tour is split into contiguous segments,
+   each optimized independently as a fixed-endpoint sub-problem on its own
+   core, then re-joined; boundaries rotate every round so the whole tour gets
+   interior-quality optimization. Small inputs run one independent ILS walker
+   per core instead.
+7. **Spike repair** — endpoints of unusually long edges get a targeted pass
+   with extended Or-opt lengths, directly reducing route outliers.
+
+On uniform random instances the solver lands within ~0.7–1.8% of the
+asymptotic optimal-tour estimate (Beardwood–Halton–Hammersley) at default
+settings (100k points, 30s, 32 cores: +0.72%; 1M points, 120s: +1.79%), with
+near-zero outlier spikes. Extra cores buy either wall time (32 threads reach
+1-thread quality ~3× sooner) or quality (lower gap at equal time).
 
 ## Prerequisites
 
 - Rust toolchain with 2024 edition support (Rust 1.90+ recommended)
 
-### Using an external LKH binary (default)
-
-If you do **not** enable the `fetch-lkh` feature, you must provide an LKH executable at runtime via `--lkh-exe <path>`.
-
-### Embedding LKH at build time (`fetch-lkh` feature)
-
-- Windows:
-  - Download `LKH.exe` from:
-    http://webhotel4.ruc.dk/~keld/research/LKH-3/LKH-3.exe
-  - Provide it to the build either by:
-    - setting `LKH_EXE_PATH` to the full path of `LKH.exe` (recommended), or
-    - placing `LKH.exe` in the repository root (do **not** commit it)
-- Linux/macOS:
-  - system tools:
-    - `make`
-    - `tar`
-    - `curl` or `wget` (to download LKH source during build)
+That's it — there is no external solver to download and no licensing caveat:
+everything is Apache-2.0.
 
 ## Setup
-
-1. Clone the repo:
 
 ```bash
 git clone https://github.com/TurtIeSocks/tsp-mt.git
 cd tsp-mt
-```
-
-2. Build the release binary.
-
-### Default build (external LKH at runtime)
-
-```bash
 cargo build --release
-```
-
-At runtime, pass your LKH executable:
-
-```bash
-target/release/tsp-mt --lkh-exe /path/to/LKH [args] < points.txt
-```
-
-### Build with embedded LKH (`fetch-lkh`)
-
-```bash
-# Linux/macOS: downloads + builds LKH during `cargo build`
-cargo build --release --features fetch-lkh
-
-# Windows: you must provide LKH.exe yourself
-# PowerShell:
-$env:LKH_EXE_PATH="C:\path\to\LKH.exe"; cargo build --release --features fetch-lkh
 ```
 
 ### Use With [Koji](https://github.com/TurtIeSocks/Koji)
@@ -71,33 +64,8 @@ $env:LKH_EXE_PATH="C:\path\to\LKH.exe"; cargo build --release --features fetch-l
 Build, then copy the final binary to Koji's routing plugins folder:
 
 ```bash
-# build with script above ^
 cp target/release/tsp-mt ~/{your_koji_directory}/server/algorithms/src/routing/plugins/
 ```
-
-### How LKH Is Provided
-
-During build, `build.rs` only runs when the `fetch-lkh` feature is enabled.
-
-- Linux/macOS (`fetch-lkh`):
-  - Downloads the LKH source archive (default is a pinned GitHub source mirror URL)
-  - Verifies the archive SHA-256
-  - Builds `LKH` with `make`
-  - Embeds the resulting executable bytes into this binary
-
-- Windows (`fetch-lkh`):
-  - Uses `LKH_EXE_PATH` if set; otherwise falls back to `./LKH.exe` in the repository root
-  - (Optional) Verifies SHA-256 if you set `TSP_MT_LKH_WINDOWS_EXE_SHA256`
-  - Embeds the executable bytes into this binary
-
-At runtime, the embedded LKH binary is extracted into your OS temp directory (unless you pass `--lkh-exe`).
-
-Overrides:
-
-- `TSP_MT_LKH_URL`: override the source archive URL (Linux/macOS only)
-- `TSP_MT_LKH_SHA256`: override the expected SHA-256 for the archive
-- `LKH_EXE_PATH`: provide a path to `LKH.exe` on Windows
-- `TSP_MT_LKH_WINDOWS_EXE_SHA256`: verify the Windows `LKH.exe` by SHA-256
 
 ## Input Format
 
@@ -107,7 +75,6 @@ Overrides:
 - Newlines and spaces are both valid separators and can be mixed
 - Latitude must be in `[-90, 90]`
 - Longitude must be in `[-180, 180]`
-- Provide at least 3 points for normal TSP cycle solving
 
 Example valid input:
 
@@ -122,126 +89,88 @@ Example valid input:
 - Exactly one `lat,lng` row per line
 - Blank lines are rejected
 - Space-separated tokens on the same line are rejected in file mode
-- Latitude must be in `[-90, 90]`
-- Longitude must be in `[-180, 180]`
 
 ## Output Format
 
 - `stdout`: ordered route, one `lat,lng` per line (default)
 - `--output <path>`: ordered route written to the specified file
 - `stderr`: progress, timing, and distance metrics (default)
-- `--log-output <path>`: logs/metrics written to the specified file instead of stderr
+- `--log-output <path>`: logs/metrics written to the specified file instead
 
 ## Run Examples
 
-Basic usage. Reads points via stdin and saves them via stdout.
-
 ```bash
-cargo run --release -- [args] < points.txt > output.txt
-```
+# stdin -> stdout
+target/release/tsp-mt < points.txt > route.txt
 
-Cleaner output, no Cargo compile logs.
+# files, with a 30 second budget
+target/release/tsp-mt --input points.txt --output route.txt --time-limit 30
 
-```bash
-target/release/tsp-mt [args] < points.txt > output.txt
-```
-
-Read points from a file directly (no stdin redirect):
-
-```bash
-target/release/tsp-mt [args] --input points.txt --output output.txt
-```
-
-To save output to a file rather than capturing it via `stdout`.
-
-```bash
-target/release/tsp-mt [args] --output output.txt < points.txt
-```
-
-To save logs to file:
-
-```bash
-target/release/tsp-mt [args] --output output.txt --log-output run.log < points.txt
+# reproducible run on 8 threads with metrics
+target/release/tsp-mt --threads 8 --seed 42 --log-level=info < points.txt
 ```
 
 ## CLI Arguments
 
-All arguments are long-form flags.
-Both `--flag value` and `--flag=value` work.
+All arguments are long-form flags. Both `--flag value` and `--flag=value` work.
 
-| Argument                              | Type                |                  Default | Notes                                                                         |
-| ------------------------------------- | ------------------- | -----------------------: | ----------------------------------------------------------------------------- |
-| `--lkh-exe <path>`                    | path                |                   `auto` | Use this LKH executable instead of extracted embedded one                     |
-| `--work-dir <path>`                   | path                | `<os-temp>/tsp-mt-<pid>` | Temp/output workspace for run artifacts                                       |
-| `--input <path>`                      | path                |                  `stdin` | Read points from this file instead of stdin; requires UTF-8 `lat,lng` rows    |
-| `--output <path>`                     | path                |                 `stdout` | Write ordered route points to this file instead of stdout                     |
-| `--projection-radius <f64>`           | float               |                   `70.0` | Must be `> 0`                                                                 |
-| `--max-chunk-size <usize>`            | int                 |                   `5000` | Must be `> 0`; above this input size, H3 chunked solver is used               |
-| `--centroid-order-seed <u64>`         | int                 |                    `999` | Seed for chunk-centroid ordering run                                          |
-| `--centroid-order-max-trials <usize>` | int                 |                  `20000` | LKH `MAX_TRIALS` for centroid ordering                                        |
-| `--centroid-order-time-limit <usize>` | int                 |                     `10` | LKH `TIME_LIMIT` seconds for centroid ordering                                |
-| `--solver-mode <value>`               | enum                |         `multi-parallel` | One of: `single`, `multi-seed`, `multi-parallel`                              |
-| `--boundary-2opt-window <usize>`      | int                 |                    `500` | Boundary-local 2-opt window during chunk stitching                            |
-| `--boundary-2opt-passes <usize>`      | int                 |                     `50` | Boundary-local 2-opt passes during chunk stitching                            |
-| `--spike-repair-top-n <usize>`        | int                 |                     `48` | Number of longest edges targeted by post-stitch spike-repair                  |
-| `--spike-repair-window <usize>`       | int                 |                    `700` | 2-opt window used in post-stitch spike-repair                                 |
-| `--spike-repair-passes <usize>`       | int                 |                      `5` | 2-opt passes used in post-stitch spike-repair                                 |
-| `--outlier-threshold <f64>`           | float               |                   `10.0` | Distance threshold (meters) for counting spike/outlier jumps in route metrics |
-| `--cleanup[=<bool>]`                  | bool (optional val) |                   `true` | If provided without value, sets to `true`                                     |
-| `--no-cleanup`                        | flag                |                    `n/a` | Forces `cleanup=false`                                                        |
-| `--use-initial-tour[=<bool>]`         | bool (optional val) |                  `false` | Build an `INITIAL_TOUR_FILE` from input order and include it in each `.par`   |
-| `--no-use-initial-tour`               | flag                |                    `n/a` | Forces `use_initial_tour=false`                                               |
-| `--log-level <value>`                 | enum                |                   `warn` | One of: `error`, `warn`, `warning`, `info`, `debug`, `trace`, `off`           |
-| `--log-format <value>`                | enum                |                `compact` | One of: `compact`, `pretty`                                                   |
-| `--log-timestamp[=<bool>]`            | bool (optional val) |                   `true` | If provided without value, sets to `true`                                     |
-| `--no-log-timestamp`                  | flag                |                    `n/a` | Forces `log_timestamp=false`                                                  |
-| `--log-output <path>`                 | path                |                 `stderr` | Write logs/metrics to this file instead of stderr                             |
-| `--help`, `-h`                        | flag                |                    `n/a` | Prints usage and exits                                                        |
+| Argument                    | Type                |      Default | Notes                                                                |
+| --------------------------- | ------------------- | -----------: | -------------------------------------------------------------------- |
+| `--input <path>`            | path                |      `stdin` | Read points from this file instead of stdin; UTF-8 `lat,lng` rows     |
+| `--output <path>`           | path                |     `stdout` | Write ordered route points to this file instead of stdout             |
+| `--time-limit <seconds>`    | float               | `0` (auto)   | Wall-clock budget; `0` derives one from the input size (2s–120s)      |
+| `--seed <u64>`              | int                 |      `12345` | RNG seed for the perturbation phase                                   |
+| `--threads <usize>`         | int                 |    `0` (all) | Worker threads; `0` uses all available cores                          |
+| `--max-neighbors <usize>`   | int                 |         `10` | Candidate edges per point; higher = better quality, slower            |
+| `--outlier-threshold <f64>` | float               |       `10.0` | Spike threshold as a multiple of the average edge, for metrics logs   |
+| `--log-level <value>`       | enum                |       `warn` | One of: `error`, `warn`, `warning`, `info`, `debug`, `trace`, `off`   |
+| `--log-format <value>`      | enum                |    `compact` | One of: `compact`, `pretty`                                           |
+| `--log-timestamp[=<bool>]`  | bool (optional val) |       `true` | If provided without value, sets to `true`                             |
+| `--no-log-timestamp`        | flag                |        `n/a` | Forces `log_timestamp=false`                                          |
+| `--log-output <path>`       | path                |     `stderr` | Write logs/metrics to this file instead of stderr                     |
+| `--help`, `-h`              | flag                |        `n/a` | Prints usage and exits                                                |
 
-Accepted boolean values for `--log-timestamp=<bool>`, `--cleanup=<bool>`, and
-`--use-initial-tour=<bool>`:  
+Accepted boolean values for `--log-timestamp=<bool>`:
 `1/0`, `true/false`, `yes/no`, `on/off` (common case variants supported).
+
+## Benchmarking
+
+Planar quality benchmark against the Beardwood–Halton–Hammersley estimate
+(asymptotic optimal length for uniform random points):
+
+```bash
+# n points, seconds, threads
+cargo run --release -p tsp_solver --example bench -- 100000 30 0
+
+# or a TSPLIB file (NODE_COORD_SECTION / EUC_2D)
+cargo run --release -p tsp_solver --example bench -- path/to/instance.tsp 30 0
+```
+
+End-to-end geographic benchmark:
+
+```bash
+./scripts/benchmark.sh
+```
+
+See [benchmark/README.md](benchmark/README.md).
 
 ## Common Errors
 
-- `No points provided on stdin.`  
+- `No points provided on stdin.`
   You did not pipe or redirect any input.
 
-- `Input file must be UTF-8 raw text: ...`  
+- `Input file must be UTF-8 raw text: ...`
   The `--input` file is not valid UTF-8 text.
 
-- `Input file ... line N: expected exactly one 'lat,lng' row`  
+- `Input file ... line N: expected exactly one 'lat,lng' row`
   The `--input` file has invalid row formatting (for example multiple tokens on one line).
 
-- `Need at least 3 points for a cycle`  
-  Add at least 3 points.
+- `... invalid lat/lng values: ...`
+  At least one point is out of bounds or non-finite; the message names the
+  offending token or file line.
 
-- `Input contains invalid lat/lng values`  
-  At least one point is out of bounds or non-finite.
+## License & Attribution
 
-- Build error downloading LKH archive  
-  Ensure `curl`/`wget` and network access, set `TSP_MT_LKH_URL`.
-
-## LKH dependency notice
-
-This project can optionally use the LKH-3 solver by Keld Helsgaun.
-
-LKH is **not open source software** and is distributed under a
-research-only license by its author. It is **not included** in this
-repository.
-
-If you enable LKH support, the build process will download LKH source
-code from a public source mirror and compile it locally on your
-machine. By enabling this functionality, **you explicitly agree to
-comply with the LKH license terms**, and you are responsible for any
-use or redistribution.
-
-LKH license and homepage:
-http://webhotel4.ruc.dk/~keld/research/LKH-3/
-
-To enable LKH support, you must enable the `fetch-lkh` cargo feature. By enabling the `fetch-lkh` feature, you acknowledge and agree to comply
-with the LKH license terms.
-
-```bash
-cargo build --release --features fetch-lkh
-```
+Apache-2.0 for the entire workspace. The solver implements algorithms
+*described* in the published TSP literature; it is not a port of, and shares
+no code with, LKH or any other solver implementation.
